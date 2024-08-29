@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional
 from shapely import to_geojson, union_all
 from shapely.geometry import shape
-from .models import Image
+from .data import Image
 from geojson_pydantic import FeatureCollection, MultiPolygon, Polygon
 from .. import console
 

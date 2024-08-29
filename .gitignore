@@ -1,5 +1,11 @@
 ### project
 
+rasters/
+blobs/
+.DS_Store
+*.tif
+*.pmtile
+
 # cannot currently release the dataset code
 # scale_alibi/dataset/*
 

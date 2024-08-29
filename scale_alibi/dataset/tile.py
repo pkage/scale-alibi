@@ -42,6 +42,7 @@ def convert_rio_bbox(bbox: BoundingBox) -> LngLatBbox:
 
 def convert_bbox_to_geojson(bbox: LngLatBbox) -> Polygon:
     return Polygon(
+        type='Polygon',
         coordinates=[[
             # (bbox.north, bbox.east),
             # (bbox.south, bbox.east),
@@ -132,7 +133,7 @@ def _calculate_tile_schedule(dataset: Reader, min_zoom: int = 1, max_zoom: int =
         dataset.info().bounds
     )
     bounding_poly = convert_bbox_to_geojson(bounding_bbox)
-    bounding_poly = Feature(geometry=bounding_poly)
+    bounding_poly = Feature(geometry=bounding_poly, type='Feature', properties=None)
 
     # next, use .burn(...) from supermercado as it's much faster than .children from mercantile
     sched_raws = []
@@ -246,8 +247,7 @@ def convert_to_tiles(infile, outfile, min_zoom=6, max_zoom=14):
         sched = get_tile_schedule(
             infile,
             min_zoom=min_zoom,
-            max_zoom=max_zoom,
-            console=console
+            max_zoom=max_zoom
         )
 
         skipped = 0

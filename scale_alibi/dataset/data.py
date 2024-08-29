@@ -5,3 +5,4 @@ class Image(BaseModel):
     # this will have... other metadata eventually
 
     polygon: Polygon
+
