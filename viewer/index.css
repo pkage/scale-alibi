@@ -1,0 +1,31 @@
+:root {
+    font-family: "Inconsolata", monospace;
+    font-optical-sizing: auto;
+    font-weight: 300;
+    font-style: normal;
+    font-variation-settings: "wdth" 100;
+
+
+    --white: #ffffffff;
+    --black: #000000ff;
+    --tomato: #fe4a49ff;
+    --moonstone: #009fb7ff;
+    --spring-green: #31e981ff;
+
+    --fg: black;
+    --bg: white;
+
+
+    background-color: var(--bg);
+    color: var(--fg);
+}
+
+body {
+    margin: 0;
+    height: 100dvh;
+}
+
+#map {
+    height: 100dvh;
+    background-color: black;
+}
