@@ -2,7 +2,7 @@ from collections import namedtuple
 from io import BytesIO
 import os
 from statistics import mean
-from typing import Dict, List, Tuple, Optional
+from typing import Callable, Dict, List, Tuple, Optional, Any
 
 from PIL import Image
 from PIL.Image import Resampling
@@ -169,8 +169,8 @@ def _calculate_tile_schedule(dataset: Reader, min_zoom: int = 1, max_zoom: int =
 
     return sched
 
-def get_png_tile(dataset: Reader, tile: Tile) -> bytes:
-    tile_data = dataset.tile(tile.x, tile.y, tile.z)
+def create_png_tile(datasets: List[Reader], tile: Tile) -> bytes:
+    tile_data = datasets[0].tile(tile.x, tile.y, tile.z)
 
     # create a Pillow image from the rearranged rio_tiler ImageData
     tile_img = Image.fromarray(
@@ -186,6 +186,20 @@ def get_png_tile(dataset: Reader, tile: Tile) -> bytes:
     tile_img.save(io, format='PNG')
 
     return io.getvalue()
+
+def create_numpy_tile(datasets: List[Reader], tile: Tile):
+    tile_data = []
+    for dataset in datasets:
+        tile_data.append(
+            dataset.tile(tile.x, tile.y, tile.z)
+        )
+
+    out_arr = np.stack( tile_data, axis=-1 )
+
+    io = BytesIO()
+    out_arr = np.save(io, out_arr)
+    return io.getvalue()
+    
 
 
 def get_tile_schedule(infile: str, min_zoom=6, max_zoom=14, quiet=True) -> List[Tile]:
@@ -216,66 +230,125 @@ def get_tile_schedule(infile: str, min_zoom=6, max_zoom=14, quiet=True) -> List[
         return sched
 
     
-def convert_to_tiles(infile, outfile, min_zoom=6, max_zoom=14):
-    with Reader(infile) as dataset:
-        to_e7 = lambda n: int(n * 10_000_000)
+def convert_to_tiles(
+        infiles: List[str],
+        outfile: str,
+        min_zoom: int = 6,
+        max_zoom: int = 14,
+        tile_type: TileType = TileType.PNG,
+        tile_processor: Callable = create_png_tile
+    ):
+    '''
 
-        bbox = convert_rio_bbox(
-            # the .info() converts to WGS84
-            dataset.info().bounds
+    :param infiles: List of input files to include in the raster. The first file sets the parameters for the pmtile archive info (e.g. bounds).
+    :type infiles: List[str]
+    :param outfile: File to write archive to
+    :type outfile: str
+    :param min_zoom: Minimum zoom level to construct. Default 6
+    :type min_zoom: int
+    :param max_zoom: Maximum zoom level to construct. Default 14
+    :type max_zoom: int
+    :param tile_type: The metadata of the tile type. This project uses Unknown to refer to Numpy tiles
+    :type tile_type: pmtiles.tile.TileType
+    :param tile_processor: Tile processing function. Takes a list of datasets and a tile, and returns a representation of that tile that should be saved.
+    :type tile_processor: Callable[ [List[Reader]], [Any]]
+    '''
+    assert len(infiles) > 0
+
+    datasets = []
+    for infile in infiles:
+        datasets.append(Reader(infile))
+
+
+    to_e7 = lambda n: int(n * 10_000_000)
+
+    bbox = convert_rio_bbox(
+        # the .info() converts to WGS84
+        datasets[0].info().bounds
+    )
+
+    pminfo = {
+        'tile_type': tile_type, #TileType.PNG,
+        'tile_compression': Compression.NONE,
+
+        'min_zoom': min_zoom,
+        'max_zoom': max_zoom,
+
+        # these need to be switched because i'm pretty sure pmtiles has it backwards...
+        'min_lon_e7': to_e7(bbox.west),
+        'min_lat_e7': to_e7(bbox.south),
+        'max_lon_e7': to_e7(bbox.east),
+        'max_lat_e7': to_e7(bbox.north),
+
+        'center_zoom': int(mean([min_zoom, max_zoom])),
+        'center_lat_e7': to_e7(mean([bbox.east, bbox.west])),
+        'center_lon_e7': to_e7(mean([bbox.north, bbox.south]))
+    }
+
+
+    sched = get_tile_schedule(
+        infiles[0],
+        min_zoom=min_zoom,
+        max_zoom=max_zoom
+    )
+
+    skipped = 0
+
+    with open(outfile, 'wb') as out_f:
+        writer = PMWriter(out_f)
+
+        for tile in track(sched, description='Creating tiles...', console=console):
+            tileid = zxy_to_tileid(tile.z, tile.x, tile.y)
+            # print(f'{tile} -> {tileid}')
+            try:
+                tile_bytes = tile_processor(datasets, tile)
+
+                writer.write_tile(tileid, tile_bytes)
+            except TileOutsideBounds:
+                skipped += 1
+
+        print(f'skipped {skipped} tiles')
+
+        writer.finalize(
+            pminfo,
+            {
+                'attribution': 'raster gen'
+            }
         )
 
-        pminfo = {
-            'tile_type': TileType.PNG,
-            'tile_compression': Compression.NONE,
-
-            'min_zoom': min_zoom,
-            'max_zoom': max_zoom,
-
-            # these need to be switched because i'm pretty sure pmtiles has it backwards...
-            'min_lon_e7': to_e7(bbox.west),
-            'min_lat_e7': to_e7(bbox.south),
-            'max_lon_e7': to_e7(bbox.east),
-            'max_lat_e7': to_e7(bbox.north),
-
-            'center_zoom': int(mean([min_zoom, max_zoom])),
-            'center_lat_e7': to_e7(mean([bbox.east, bbox.west])),
-            'center_lon_e7': to_e7(mean([bbox.north, bbox.south]))
-        }
-
-
-        sched = get_tile_schedule(
-            infile,
-            min_zoom=min_zoom,
-            max_zoom=max_zoom
-        )
-
-        skipped = 0
-
-        with open(outfile, 'wb') as out_f:
-            writer = PMWriter(out_f)
-
-            for tile in track(sched, description='Creating tiles...', console=console):
-                tileid = zxy_to_tileid(tile.z, tile.x, tile.y)
-                # print(f'{tile} -> {tileid}')
-                try:
-                    tile_bytes = get_png_tile(dataset, tile)
-
-                    writer.write_tile(tileid, tile_bytes)
-                except TileOutsideBounds:
-                    skipped += 1
-
-            print(f'skipped {skipped} tiles')
-
-            writer.finalize(
-                pminfo,
-                {
-                    'attribution': 'raster gen'
-                }
-            )
     osize = os.path.getsize(outfile)
     print(f'Total bundle size: {(osize/(1024*1024)):.2f} MB')
 
+def convert_to_png_tiles(
+        infile: str,
+        outfile: str,
+        min_zoom: int = 6,
+        max_zoom: int = 14
+    ):
+    return convert_to_tiles(
+        [infile],
+        outfile,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        tile_type=TileType.PNG,
+        tile_processor=create_png_tile
+    )
+
+
+def convert_to_numpy_tiles(
+        infiles: str,
+        outfile: str,
+        min_zoom: int = 6,
+        max_zoom: int = 14
+    ):
+    return convert_to_tiles(
+        infiles,
+        outfile,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        tile_type=TileType.UNKNOWN,
+        tile_processor=create_numpy_tile
+    )
 
 def merge_tilesets(tilesets, outfile):
 
