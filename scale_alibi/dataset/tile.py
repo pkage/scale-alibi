@@ -387,6 +387,54 @@ def convert_to_png_sar_tiles(
         tile_processor=create_png_sar_tile
     )
 
+
+def get_tile_list(tilesets: List[str]) -> np.ndarray:
+    tileid_list = set()
+    with console.status('gathering metadata...'):
+        for filename in tilesets:
+            with open(filename, 'rb') as fp:
+                source = MmapSource(fp)
+
+                tiles = []
+                for zxy, _ in all_tiles(source):
+                    tileid = zxy_to_tileid(zxy[0], zxy[1], zxy[2])
+                    tiles.append(tileid)
+
+                # convert to a set to make my life a little easier
+                tileid_list |= set(tiles)
+
+    tileid_list = list(tileid_list)
+    tileid_list.sort()
+
+    return np.array(tileid_list)
+
+
+def create_zoom_list(tile_list: np.ndarray, source_level: int, target_levels: List[int]) -> np.ndarray:
+    source_tiles = []
+    out_tiles = []
+    out_ids = []
+
+    for tile_id in track(tile_list, description='filtering tiles...'):
+        z, x, y = tileid_to_zxy(tile_id)
+        if z != source_level:
+            continue
+
+        source_tiles.append(Tile(z=z, x=x, y=y))
+
+    for source_tile in track(source_tiles, description='generating list...'):
+        for level in target_levels:
+            out_tiles += children(source_tile, level=level)
+
+    for tile in track(out_tiles, description='converting tiles...'):
+        tile_id = zxy_to_tileid(tile.z, tile.x, tile.y)
+        out_ids.append(tile_id)
+
+    out_arr = np.unique( np.array(out_ids) )
+    out_arr.sort()
+
+    return out_arr
+
+
 def merge_tilesets(tilesets, outfile):
 
     # helper function to get the metadata value

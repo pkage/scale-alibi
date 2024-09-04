@@ -2,6 +2,7 @@ import asyncclick as click
 from dotenv import load_dotenv
 import mercantile
 import pendulum
+import numpy as np
 
 from . import console
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
@@ -9,6 +10,8 @@ from .dataset.tile import (
     convert_to_png_sar_tiles,
     convert_to_png_tiles,
     create_downsamples,
+    create_zoom_list,
+    get_tile_list,
     merge_tilesets,
 )
 
@@ -32,10 +35,9 @@ def download():
     pass
 
 @download.command('sar')
-@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. pass multiple by comma separating tiles')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multiple', multiple=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
 def download_sar(tiles, output):
-    tiles = tiles.split(',')
     all_images = []
     for tile in tiles:
         tile = parse_tile(tile)
@@ -53,10 +55,9 @@ def download_sar(tiles, output):
         fp.write(script)
 
 @download.command('visual')
-@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. pass multiple by comma separating tiles')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple')
 @click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
-def download_sar(tiles, output):
-    tiles = tiles.split(',')
+def download_visual(tiles, output):
     all_images = []
     for tile in tiles:
         tile = parse_tile(tile)
@@ -124,5 +125,57 @@ def raster_merge(input, output):
 
     merge_tilesets(
         input,
+        output
+    )
+
+@raster.command('tile-list', help='get all tiles in a raster as a list')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True, multiple=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile list (npy)', required=True)
+def raster_tile_list(input, output):
+    console.log(input, output)
+
+    arr = get_tile_list(input)
+    console.log(f'found {arr.shape[0]} tiles')
+    np.save(output, arr)
+
+
+@raster.command('tile-zoom', help='get all tiles in a raster as a list')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile list (npy)', required=True)
+@click.option('-s', '--source-level', help='source_level', required=True, type=int)
+@click.option('-l', '--levels', type=int, help='input tile list (npy)', required=True, multiple=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile list (npy)', required=True)
+def raster_tile_zoom(input, source_level, levels, output):
+    console.log(input, source_level, levels, output)
+
+    arr = np.load(input)
+    console.log(f'found {arr.shape[0]} tiles')
+
+    zoom = create_zoom_list(
+        arr,
+        source_level,
+        levels
+    )
+    console.log(f'created {zoom.shape[0]} tiles')
+
+    np.save(output, zoom)
+
+    # arr = get_tile_list(input)
+    # console.log(f'found {arr.shape[0]} tiles')
+    # np.save(output, arr)
+
+@raster.command('tile-download')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile list (npy)', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+def raster_tile_download(input, output):
+    console.log(input, output)
+
+    arr = np.load(input)
+    console.log(f'found {arr.shape[0]} tiles')
+
+    from .dataset.download import download_tile_archive
+
+    download_tile_archive(
+        arr,
+        'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false',
         output
     )

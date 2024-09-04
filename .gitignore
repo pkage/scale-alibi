@@ -1,5 +1,6 @@
 ### project
 
+scale_alibi/dataset/download.py
 viewer/public/rasters/
 viewer/public/rasters
 rasters/
