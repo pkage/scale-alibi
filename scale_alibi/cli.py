@@ -179,5 +179,5 @@ def raster_tile_download(input, output, workers):
         arr,
         'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false',
         output,
-        workers=workers
+        n_workers=workers
     )
