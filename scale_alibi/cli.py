@@ -166,7 +166,8 @@ def raster_tile_zoom(input, source_level, levels, output):
 @raster.command('tile-download')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile list (npy)', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
-def raster_tile_download(input, output):
+@click.option('-w', '--workers', type=int, help='number of workers', default=2)
+def raster_tile_download(input, output, workers):
     console.log(input, output)
 
     arr = np.load(input)
@@ -177,5 +178,6 @@ def raster_tile_download(input, output):
     download_tile_archive(
         arr,
         'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false',
-        output
+        output,
+        workers=workers
     )
