@@ -1,8 +1,8 @@
 from geojson_pydantic.geometries import Polygon
 from pydantic import BaseModel
+from pystac import Item
+from typing import Any
 
 class Image(BaseModel):
-    # this will have... other metadata eventually
-
     polygon: Polygon
-
+    item: Any

@@ -1,8 +1,20 @@
 import asyncclick as click
-
-from scale_alibi.dataset.tile import convert_to_png_tiles, convert_to_numpy_tiles
-from . import console
 from dotenv import load_dotenv
+import mercantile
+import pendulum
+
+from . import console
+from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
+from .dataset.tile import (
+    convert_to_png_sar_tiles,
+    convert_to_png_tiles,
+    create_downsamples,
+    merge_tilesets,
+)
+
+def parse_tile(tile_str: str) -> mercantile.Tile:
+    z,x,y = tile_str.split('/')
+    return mercantile.Tile(z=int(z), x=int(x), y=int(y))
 
 # pre-work
 load_dotenv()
@@ -13,23 +25,104 @@ def cli():
 
 @cli.command('debug', help='debug hook')
 def cli_debug():
-    console.log('beginning hooks')
-
-@cli.group('dataset')
-def dataset():
     ...
 
+@cli.group('download')
+def download():
+    pass
 
-@dataset.command('geotiff')
-@click.option('-i', '--input', type=click.Path(readable=True), help='input tiff files', required=True, multiple=True)
+@download.command('sar')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. pass multiple by comma separating tiles')
+@click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
+def download_sar(tiles, output):
+    tiles = tiles.split(',')
+    all_images = []
+    for tile in tiles:
+        tile = parse_tile(tile)
+
+        images = get_sar_images(
+            tile,
+            pendulum.now().subtract(weeks=4)
+        )
+
+        all_images += images
+
+    script = create_sar_script(all_images)
+
+    with open(output, 'w') as fp:
+        fp.write(script)
+
+@download.command('visual')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. pass multiple by comma separating tiles')
+@click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
+def download_sar(tiles, output):
+    tiles = tiles.split(',')
+    all_images = []
+    for tile in tiles:
+        tile = parse_tile(tile)
+
+        images = get_visual_images(
+            tile,
+            pendulum.now().subtract(weeks=4)
+        )
+
+        all_images += images
+
+    script = create_visual_script(all_images)
+
+    with open(output, 'w') as fp:
+        fp.write(script)
+
+
+@cli.group('raster')
+def raster():
+    pass
+
+
+@raster.command('tile-visual', help='create pmtile archive from one or more archives')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tiff files', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
 @click.option('-l', '--level', type=int, help='Z level to create tiles at', default=17)
-@click.option('-t', '--tile-type', type=click.Choice(['numpy', 'png']), default='png', help='tile type to create (numpy or png)')
-def dataset_process_geotiff(input, output, level, tile_type):
+def raster_process_geotiff_visual(input, output, level):
     console.log(input, output, level)
     
     # get_tile_schedule(input, min_zoom=level, max_zoom=level+1, quiet=False)
-    if tile_type == 'png':
-        convert_to_png_tiles(input, output, min_zoom=level, max_zoom=level+1)
-    else:
-        convert_to_numpy_tiles(input, output, min_zoom=level, max_zoom=level+1)
+    convert_to_png_tiles(input, output, min_zoom=level, max_zoom=level+1)
+
+@raster.command('tile-sar', help='create pmtile archive from one or more archives (sar flavored)')
+@click.option('-vv', '--vv', type=click.Path(readable=True), help='vv band input tiff', required=True)
+@click.option('-vh', '--vh', type=click.Path(readable=True), help='vh band input tiff', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+@click.option('-l', '--level', type=int, help='Z level to create tiles at', default=17)
+def raster_process_geotiff_sar(vv, vh, output, level):
+    console.log(vv,vh, output, level)
+    
+    convert_to_png_sar_tiles(vv, vh, output, min_zoom=level, max_zoom=level+1)
+
+
+# def create_downsamples(filename: str, outfile: str, source_level: Optional[int], final_level: int, resampling: Optional[Resampling] = Resampling.NEAREST):
+
+@raster.command('downsample', help='create pmtile archive from one or more archives')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+@click.option('-l', '--level', type=int, help='Z level to source from', default=17)
+def raster_downsample(input, output, level):
+    console.log(input, output, level)
+    
+    create_downsamples(
+        input,
+        output,
+        level,
+        1
+    )
+
+@raster.command('merge', help='merge pmtile archives into one')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True, multiple=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+def raster_merge(input, output):
+    console.log(input, output)
+
+    merge_tilesets(
+        input,
+        output
+    )

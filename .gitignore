@@ -1,5 +1,7 @@
 ### project
 
+viewer/public/rasters/
+viewer/public/rasters
 rasters/
 blobs/
 .DS_Store

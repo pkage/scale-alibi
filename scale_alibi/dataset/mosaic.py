@@ -30,7 +30,7 @@ def get_group_coverage(target: Polygon, images: List[Image]) -> List[Tuple[float
     return sorted(coverage, key=lambda p: p[0], reverse=True)
 
 
-def get_next_image(aoi: Polygon, frozen: List[Image], candidates: List[Image], _depth=0, max_depth=None) -> List[Image]:
+def get_next_image(aoi: Polygon, frozen: List[Image], candidates: List[Image], _depth=0, max_depth=None, tolerance: float=0.001) -> List[Image]:
     if len(candidates) == 0 or (max_depth is not None and _depth == max_depth):
         return frozen
 
@@ -58,7 +58,8 @@ def get_next_image(aoi: Polygon, frozen: List[Image], candidates: List[Image], _
     console.print(f'[black]image set {_depth} (max {max_depth}), overlap: {overlap:.02%}')
 
     # early termination: if we've found a spanning polygon set then return it
-    if overlap == 1 :
+    if (overlap + tolerance) > 1.0:
+        console.print('[green]found a solution')
         return frozen
 
     # remove overlap info 
@@ -72,7 +73,7 @@ def min_spanning_images(aoi: Polygon, images: List[Image], max_solution_size=Non
     if len(images) == 0:
         return []
 
-    sorted_images = sorted(images, key=lambda k: k.aoi_coverage, reverse=True)
+    sorted_images = sorted(images, key=lambda k: get_overlap(k.polygon, aoi), reverse=True)
 
     lead_image = sorted_images[0]
 

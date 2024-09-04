@@ -29,3 +29,8 @@ body {
     height: 100dvh;
     background-color: black;
 }
+
+.dg.ac {
+    z-index: 10000 !important;
+}
+

@@ -66,3 +66,9 @@ aws s3 cp  `jq '.features[0].assets.vh.href' -r < search-s1.json` vh.tif --reque
 ```sh
 
 ```
+
+for NAIP:
+
+```
+https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false
+```

@@ -16,6 +16,7 @@ from pmtiles.reader import MmapSource, all_tiles
 from rasterio.coords import BoundingBox
 from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.io.rasterio import Reader
+import rasterio
 from supermercado.burntiles import burn
 import numpy as np
 
@@ -200,6 +201,41 @@ def create_numpy_tile(datasets: List[Reader], tile: Tile):
     out_arr = np.save(io, out_arr)
     return io.getvalue()
     
+def create_png_sar_tile(datasets: List[Reader], tile: Tile):
+    assert len(datasets) == 2
+
+    vv = datasets[0].tile(tile.x, tile.y, tile.z)
+    vh = datasets[1].tile(tile.x, tile.y, tile.z)
+
+    empty_channel = np.zeros_like(vv.array[0])
+    out_arr = np.stack( [
+        empty_channel,
+        vv.array[0].copy(),
+        vh.array[0].copy()
+    ], axis=-1 ).astype(np.float64)
+
+
+    # normalize to 256, clipping outliers
+    out_arr /= 1000.0
+    out_arr[out_arr > 1] = 1.0
+    out_arr[out_arr < 0] = 0.0
+    out_arr *= 256.0
+
+
+    # create the output image with the data mask as the alpha channel
+    tile_img = Image.fromarray(
+        out_arr.astype(np.uint8)
+    )
+    tile_img.putalpha(
+        Image.fromarray(vv.mask)
+    )
+
+
+    # write to png bytes
+    io = BytesIO()
+    tile_img.save(io, format='PNG')
+
+    return io.getvalue()
 
 
 def get_tile_schedule(infile: str, min_zoom=6, max_zoom=14, quiet=True) -> List[Tile]:
@@ -335,19 +371,20 @@ def convert_to_png_tiles(
     )
 
 
-def convert_to_numpy_tiles(
-        infiles: str,
+def convert_to_png_sar_tiles(
+        vv: str,
+        vh: str,
         outfile: str,
         min_zoom: int = 6,
         max_zoom: int = 14
     ):
     return convert_to_tiles(
-        infiles,
+        [vv, vh],
         outfile,
         min_zoom=min_zoom,
         max_zoom=max_zoom,
-        tile_type=TileType.UNKNOWN,
-        tile_processor=create_numpy_tile
+        tile_type=TileType.PNG,
+        tile_processor=create_png_sar_tile
     )
 
 def merge_tilesets(tilesets, outfile):
@@ -648,7 +685,33 @@ def create_downsamples(filename: str, outfile: str, source_level: Optional[int],
 
     osize = os.path.getsize(outfile)
     console.print(f'Total bundle size: {(osize/(1024*1024)):.2f} MB')
+
+
+def combine_tiffs(
+        infile_1: str,
+        infile_2: str,
+        outfile: str
+    ):
     
+
+    with rasterio.open(infile_1) as src_1, rasterio.open(infile_2) as src_2:
+        # first file metadata takes priority
+        meta = src_1.meta.copy()
+
+        # probably don't need this
+        # meta.update(driver='GTiff', dtype='float32')
+
+        with rasterio.open(outfile, 'w', **meta) as dst:
+            band_1 = src_1.read(1)
+            band_2 = src_2.read(1)
+            
+            combined_array = np.stack([
+                band_1,
+                band_2
+            ])
+
+            dst.write(combined_array)
+
 
 if __name__ == '__main__':
     import cProfile
