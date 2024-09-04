@@ -55,7 +55,7 @@ def download_sar(tiles, output):
         fp.write(script)
 
 @download.command('visual')
-@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple', multiple=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
 def download_visual(tiles, output):
     all_images = []
