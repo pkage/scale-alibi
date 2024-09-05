@@ -1,8 +1,10 @@
+from textwrap import dedent
 import asyncclick as click
 from dotenv import load_dotenv
 import mercantile
 import pendulum
 import numpy as np
+from pathlib import Path
 
 from . import console
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
@@ -181,3 +183,60 @@ def raster_tile_download(input, output, workers):
         output,
         n_workers=workers
     )
+
+
+@raster.command('tile-download-split')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile list (npy)', required=True)
+@click.option('-a', '--archive', type=click.Path(writable=True), help='archive name', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output download script', required=True)
+@click.option('-n', '--n-splits', type=int, help='split size', default=16)
+@click.option('-w', '--workers', type=int, help='worker count', default=4)
+def raster_tile_download_split(input, archive, output, n_splits, workers):
+    console.log(input, archive, output, n_splits)
+    input = Path(input)
+    archive = Path(archive)
+
+    arr = np.load(input)
+    subarrs = np.array_split(arr, n_splits)
+
+    output_filenames = []
+
+    for i, subarr in enumerate(subarrs):
+        output_filename = f'{input.stem}_chunk_{i}.npy'
+        output_filename = input.with_name(output_filename)
+        np.save(output_filename, subarr)
+        output_filenames.append(output_filename)
+
+    script = dedent('''\
+        #! /bin/sh
+    ''') + '\n\n'
+
+    
+    chunk_filenames = []
+
+    for i, output_filename in enumerate(output_filenames):
+        chunk_filename = f'{archive.stem}_chunk_{i}.pmtile'
+        chunk_filenames.append(chunk_filename)
+        script += dedent(f'''\
+            if ! [ -f ./rasters/{chunk_filename} ]; then
+                echo "{chunk_filename} not found, downloading..."
+                echo "downloading chunk {i+1} of {len(output_filenames)}"
+                salibi raster tile-download -i {output_filename} -o {chunk_filename} -w {workers}
+            else
+                echo "{chunk_filename} ({i+1} of {len(output_filenames)}) has been downloaded already"
+            fi
+        ''') + '\n'
+
+    merge_command = ' '.join([f'-i {chunk}' for chunk in chunk_filenames])
+    merge_command = f'salibi raster merge {merge_command} -o {archive}'
+
+    script += dedent(f'''\
+        echo "merging {len(chunk_filenames)} tilesets..."
+        {merge_command}
+    ''') + '\n'
+
+    with open(output, 'w') as fp:
+        fp.write(script)
+
+
+    console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each')
