@@ -190,9 +190,10 @@ def raster_tile_download(input, output, workers):
 @click.option('-a', '--archive', type=click.Path(writable=True), help='archive name', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output download script', required=True)
 @click.option('-n', '--n-splits', type=int, help='split size', default=16)
+@click.option('-m', '--n-merges', type=int, help='merge size (useful if you have a lot of splits)', default=16)
 @click.option('-w', '--workers', type=int, help='worker count', default=4)
-def raster_tile_download_split(input, archive, output, n_splits, workers):
-    console.log(input, archive, output, n_splits)
+def raster_tile_download_split(input, archive, output, n_splits, n_merges, workers):
+    console.log(input, archive, output, n_splits, n_merges)
     input = Path(input)
     archive = Path(archive)
 
@@ -207,8 +208,10 @@ def raster_tile_download_split(input, archive, output, n_splits, workers):
         np.save(output_filename, subarr)
         output_filenames.append(output_filename)
 
-    script = dedent('''\
+    script = dedent(f'''\
         #! /bin/sh
+
+        echo "downloading {len(output_filenames)} chunks..."
     ''') + '\n\n'
 
     
@@ -218,7 +221,7 @@ def raster_tile_download_split(input, archive, output, n_splits, workers):
         chunk_filename = f'{archive.stem}_chunk_{i}.pmtile'
         chunk_filenames.append(chunk_filename)
         script += dedent(f'''\
-            if ! [ -f ./rasters/{chunk_filename} ]; then
+            if ! [ -s {chunk_filename} ]; then
                 echo "{chunk_filename} not found, downloading..."
                 echo "downloading chunk {i+1} of {len(output_filenames)}"
                 salibi raster tile-download -i {output_filename} -o {chunk_filename} -w {workers}
@@ -227,16 +230,53 @@ def raster_tile_download_split(input, archive, output, n_splits, workers):
             fi
         ''') + '\n'
 
-    merge_command = ' '.join([f'-i {chunk}' for chunk in chunk_filenames])
-    merge_command = f'salibi raster merge {merge_command} -o {archive}'
+
+    # calculate the merges
+    submerges = np.array_split(chunk_filenames, n_merges)
+    submerges = [sm.tolist() for sm in submerges]
 
     script += dedent(f'''\
-        echo "merging {len(chunk_filenames)} tilesets..."
-        {merge_command}
+        echo "merging {len(output_filenames)} chunks into {len(submerges)} sub-merges..."
+    ''') + '\n\n'
+
+    merge_filenames = []
+    for i, submerge in enumerate(submerges):
+        merge_filename = f'{archive.stem}_merge_{i}.pmtile'
+        merge_args = ' '.join([f'-i {chunk}' for chunk in submerge])
+
+        script += dedent(f'''\
+            if ! [ -s {merge_filename} ]; then
+                echo "{merge_filename} not found, merging..."
+                echo "merging chunk {i+1} of {len(submerges)}"
+                salibi raster merge {merge_args} -o {merge_filename}
+            else
+                echo "{merge_filename} ({i+1} of {len(submerges)}) has been merged already"
+            fi
+        ''') + '\n'
+
+        merge_filenames.append(merge_filename)
+
+
+
+    merge_args = ' '.join([f'-i {chunk}' for chunk in merge_filenames])
+    script += dedent(f'''\
+        echo "merging {len(submerges)} chunks into final bundle..."
+
+        if ! [ -s {archive} ]; then
+            echo "final archive {archive} not found, merging..."
+            salibi raster merge {merge_args} -o {archive}
+        else
+            echo "{archive} has been merged already"
+        fi
     ''') + '\n'
+
+
+    script += dedent(f'''\
+        echo "done!"
+    ''')
 
     with open(output, 'w') as fp:
         fp.write(script)
 
 
-    console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each')
+    console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each,\nthen {len(submerges)} sub-merge operations ({n_merges} files each) before final merge')
