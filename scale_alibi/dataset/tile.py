@@ -761,6 +761,86 @@ def combine_tiffs(
             dst.write(combined_array)
 
 
+def remove_alpha_tiles(
+        infile: str,
+        outfile: str,
+        threshold: float = 0.05
+    ):
+
+    # using a closure here
+    # and None to indicate no alpha channel, and 
+    def check_tile(tile_bytes: bytes) -> bool | None:
+        img = Image.open(BytesIO(tile_bytes))
+        img = np.array(img)
+
+        if img.shape[-1] != 4:
+            return None
+
+        alpha_channel = img[:,:,3]
+
+        zero_proportion = 1 - (np.count_nonzero(alpha_channel) / alpha_channel.size)
+
+        if zero_proportion > threshold:
+            return False
+
+        return True
+
+
+    tile_list: List[Tuple[int, bytes]] = []
+    with console.status('getting metadata...'):
+        with open(infile, 'rb') as fp:
+            source = MmapSource(fp)
+            reader = PMReader(source)
+            header = reader.header()
+
+            for zxy, t_bytes in all_tiles(source):
+                tileid = zxy_to_tileid(zxy[0], zxy[1], zxy[2])
+                tile_list.append((tileid, t_bytes))
+
+    filtered_tile_list = []
+    non_alpha_images = 0
+    for tileid, t_bytes in track(tile_list, description='filtering tiles...'):
+        check_result = check_tile(t_bytes)
+
+        if check_result is None:
+            # warn the first time
+            if non_alpha_images == 0:
+                console.print('[yellow]tiles with no alpha channels detected, proceeding with caution...')
+            non_alpha_images += 1
+            continue
+
+        if check_result == True:
+            filtered_tile_list.append( (tileid, t_bytes) )
+
+    console.print(f'filtered out {len(tile_list) - len(filtered_tile_list)} tiles ({(len(tile_list) - len(filtered_tile_list))/len(tile_list):.2%})')
+    if non_alpha_images != 0:
+        console.print(f'[yellow]{non_alpha_images} tiles with no alpha channels were detected ({non_alpha_images / len(tile_list):.2%})')
+    
+
+    # sort by tile_id, just in case
+    filtered_tile_list.sort(key=lambda x: x[0])
+
+
+    with open(outfile, 'wb') as out_f:
+        writer = PMWriter(out_f)
+
+        # ... and then finally write them
+        for tile_id, tile_bytes in track(filtered_tile_list, description='writing tiles..'):
+            writer.write_tile(tile_id, tile_bytes)
+
+
+        with console.status('finalizing bundle...'):
+            writer.finalize(
+                header,
+                {
+                    'attribution': f'filtered (max alpha={threshold}'
+                }
+            )
+
+    osize = os.path.getsize(outfile)
+    console.print(f'Total bundle size: {(osize/(1024*1024)):.2f} MB')
+    
+
 if __name__ == '__main__':
     import cProfile
 

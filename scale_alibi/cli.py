@@ -15,6 +15,7 @@ from .dataset.tile import (
     create_zoom_list,
     get_tile_list,
     merge_tilesets,
+    remove_alpha_tiles,
 )
 
 def parse_tile(tile_str: str) -> mercantile.Tile:
@@ -82,7 +83,7 @@ def raster():
     pass
 
 
-@raster.command('tile-visual', help='create pmtile archive from one or more archives')
+@raster.command('tile-visual', help='create pmtile archive from a tiff file')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tiff files', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
 @click.option('-l', '--level', type=int, help='Z level to create tiles at', default=17)
@@ -92,7 +93,7 @@ def raster_process_geotiff_visual(input, output, level):
     # get_tile_schedule(input, min_zoom=level, max_zoom=level+1, quiet=False)
     convert_to_png_tiles(input, output, min_zoom=level, max_zoom=level+1)
 
-@raster.command('tile-sar', help='create pmtile archive from one or more archives (sar flavored)')
+@raster.command('tile-sar', help='create pmtile archive from a tiff file (sar flavored)')
 @click.option('-vv', '--vv', type=click.Path(readable=True), help='vv band input tiff', required=True)
 @click.option('-vh', '--vh', type=click.Path(readable=True), help='vh band input tiff', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
@@ -105,7 +106,7 @@ def raster_process_geotiff_sar(vv, vh, output, level):
 
 # def create_downsamples(filename: str, outfile: str, source_level: Optional[int], final_level: int, resampling: Optional[Resampling] = Resampling.NEAREST):
 
-@raster.command('downsample', help='create pmtile archive from one or more archives')
+@raster.command('downsample', help='create a display tileset by downsampling a tile archive')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
 @click.option('-l', '--level', type=int, help='Z level to source from', default=17)
@@ -279,4 +280,17 @@ def raster_tile_download_split(input, archive, output, n_splits, n_merges, worke
         fp.write(script)
 
 
-    console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each,\nthen {len(submerges)} sub-merge operations ({n_merges} files each) before final merge')
+    console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each,\nthen {len(submerges)} sub-merge operations ({len(submerges[0])} files each) before final merge')
+
+@raster.command('tile-filter', help='filter out tiles with alpha channels from a tileset')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+@click.option('-m', '--max-alpha', type=float, default=0.05, help='maximum alpha values permitted in image')
+def raster_tile_filter(input, output, max_alpha):
+    console.log(input, output, max_alpha)
+
+    remove_alpha_tiles(
+        input,
+        output,
+        threshold=max_alpha
+    )

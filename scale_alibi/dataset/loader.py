@@ -250,18 +250,20 @@ class TileUnionDataset(TileIdDataset):
 
 
 class LoresMultimodalDataset(TileIdDataset):
-    radar_datasets: TileUnionDataset
-    lores_datasets: TileUnionDataset
+    radar_datasets: TileIdDataset
+    lores_datasets: TileIdDataset
 
     def __init__(
             self,
-            radar_datasets: TileUnionDataset,
-            lores_datasets: TileUnionDataset,
+            radar_datasets: TileIdDataset,
+            lores_datasets: TileIdDataset,
             transform=None
         ):
         super().__init__(transform=transform)
         self.radar_datasets = radar_datasets
         self.lores_datasets = lores_datasets
+
+        self.recalculate_tile_list()
 
 
     
@@ -284,15 +286,15 @@ class LoresMultimodalDataset(TileIdDataset):
 
 
 class MultimodalDataset(TileIdDataset):
-    radar_datasets: TileUnionDataset
-    hires_datasets: TileUnionDataset
-    lores_datasets: TileUnionDataset
+    radar_datasets: TileIdDataset
+    hires_datasets: TileIdDataset
+    lores_datasets: TileIdDataset
 
     def __init__(
             self,
-            radar_datasets: TileUnionDataset,
-            lores_datasets: TileUnionDataset,
-            hires_datasets: TileUnionDataset,
+            radar_datasets: TileIdDataset,
+            lores_datasets: TileIdDataset,
+            hires_datasets: TileIdDataset,
             transform=None
         ):
         super().__init__(transform=transform)
@@ -318,7 +320,7 @@ class MultimodalDataset(TileIdDataset):
             lores=self.lores_datasets.get_by_tile_id(tile_id),
             hires=self.hires_datasets.get_by_tile_id(tile_id)
         )
-
+    
         return self._apply_transform(sample)
 
 
