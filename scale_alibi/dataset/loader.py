@@ -20,8 +20,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-MultimodalSample = namedtuple('MultimodalSample', ['radar', 'lores', 'hires'])
-LoresMultimodalSample = namedtuple('LoresMultimodalSample', ['radar', 'lores'])
+MultimodalSample = namedtuple('MultimodalSample', ['radar', 'lores', 'hires', 'tile_id'])
+LoresMultimodalSample = namedtuple('LoresMultimodalSample', ['radar', 'lores', 'tile_id'])
 
 # --- HELPERS ---
 
@@ -279,7 +279,8 @@ class LoresMultimodalDataset(TileIdDataset):
     def get_by_tile_id(self, tile_id) -> LoresMultimodalSample:
         sample = LoresMultimodalSample(
             radar=self.radar_datasets.get_by_tile_id(tile_id),
-            lores=self.lores_datasets.get_by_tile_id(tile_id)
+            lores=self.lores_datasets.get_by_tile_id(tile_id),
+            tile_id=tile_id
         )
 
         return self._apply_transform(sample)
@@ -318,7 +319,8 @@ class MultimodalDataset(TileIdDataset):
         sample = MultimodalSample(
             radar=self.radar_datasets.get_by_tile_id(tile_id),
             lores=self.lores_datasets.get_by_tile_id(tile_id),
-            hires=self.hires_datasets.get_by_tile_id(tile_id)
+            hires=self.hires_datasets.get_by_tile_id(tile_id),
+            tile_id=tile_id
         )
     
         return self._apply_transform(sample)
