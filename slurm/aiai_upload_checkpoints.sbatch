@@ -4,8 +4,8 @@
 #SBATCH --partition=AIAI_GPU
 #SBATCH --ntasks=1
 #SBATCH --mem=10G
-#SBATCH --output=/home/s1734411/scale-alibi/stdout.txt
-#SBATCH --error=/home/s1734411/scale-alibi/stderr.txt
+#SBATCH --output=/home/s1734411/scale-alibi/logs/upload-stdout.txt
+#SBATCH --error=/home/s1734411/scale-alibi/logs/upload-stderr.txt
 #SBATCH --time=12:00:00
 #SBATCH --job-name=scale-alibi-upload
 #SBATCH --mail-user=p.kage@ed.ac.uk
