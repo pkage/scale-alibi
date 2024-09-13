@@ -14,6 +14,7 @@ from pmtiles.tile   import TileType, tileid_to_zxy, zxy_to_tileid
 from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.io.rasterio import Reader
 from rio_tiler.models import ImageData
+import einops
 from .tile import get_tile_schedule
 
 import numpy as np
@@ -327,6 +328,22 @@ class MultimodalDataset(TileIdDataset):
 
 
 # --- TRANSFORMS ---
+
+class RemoveChannels:
+    channels_to_remove: List[int]
+
+    def __init__(self, channels_to_remove: List[int] = []):
+        self.channels_to_remove = channels_to_remove
+
+
+    def __call__(self, image: np.ndarray):
+        channels_to_keep = [i for i in range(image.shape[-1]) if i not in self.channels_to_remove]
+        return image[:,:,channels_to_keep]
+
+
+class ChannelsFirstImageOrder:
+    def __call__(self, image: np.ndarray):
+        return einops.rearrange(image, 'h w c -> c h w')
 
 
 class RandomFlip:

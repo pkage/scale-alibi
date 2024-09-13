@@ -7,8 +7,8 @@ import itertools
 import torch.nn.functional as F
 from torch import distributed as dist
 from torch import nn, einsum
-from einops import rearrange
-
+from einops import rearrange, pack
+from PIL import Image
 
 class CROMA(nn.Module):
     def __init__(
@@ -38,7 +38,7 @@ class CROMA(nn.Module):
             dim=self.encoder_dim,
             layers=int(self.encoder_layers/2),
             attention_heads=self.attention_heads,
-            in_channels=2,
+            in_channels=2, # 2 radar channels
             patch_size=self.patch_size,
         )
         self.optical_encoder = ViT(
@@ -46,7 +46,8 @@ class CROMA(nn.Module):
             dim=self.encoder_dim,
             layers=self.encoder_layers,
             attention_heads=self.attention_heads,
-            in_channels=12,
+            # in_channels=12,
+            in_channels=3, # RGB lores optical
             patch_size=self.patch_size,
         )
 
@@ -91,10 +92,10 @@ class CROMA(nn.Module):
         )
 
 
-    def forward(self, imgs, radar_mask_info, optical_mask_info, rank, world_size):
+    def forward(self, radar_imgs, optical_imgs, radar_mask_info, optical_mask_info, rank, world_size):
         # split stacked image into optical and radar
-        radar_imgs = imgs[:, 12:, ...]
-        optical_imgs = imgs[:, :12, ...]
+        #radar_imgs = imgs[:, 12:, ...]
+        #optical_imgs = imgs[:, :12, ...]
 
         # create independent random masks
         radar_masked_attn_bias = apply_mask_to_alibi(
@@ -163,6 +164,13 @@ class CROMA(nn.Module):
         )
 
         # reconstruct both sensors
+        print('radar shape', radar_imgs.shape)
+        print('optical shape', optical_imgs.shape)
+        
+        imgs, _ = pack([optical_imgs, radar_imgs], 'b * h w')
+        print('imgs shape', imgs.shape)
+        # print('ps', ps)
+        # imgs = None
         patchified_imgs = rearrange(imgs, 'b c (h i) (w j) -> b (h w) (c i j)', i=self.patch_size, j=self.patch_size)
         mae_loss = self.decoder(
             x=joint_encodings,
@@ -329,7 +337,7 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     assert embed_dim % 2 == 0
-    omega = np.arange(embed_dim // 2, dtype=np.float)
+    omega = np.arange(embed_dim // 2, dtype=np.float32)
     omega /= embed_dim / 2.
     omega = 1. / 10000 ** omega  # (D/2,)
     pos = pos.reshape(-1)  # (M,)
@@ -439,21 +447,28 @@ class ContrastLossInput(nn.Module):
         num_logits = logits_per_optical.shape[0]
         labels = torch.arange(num_logits, device=radar_features.device, dtype=torch.long)
         labels = labels + num_logits * rank
+        
+        
+        # split loss calculations up for debugging
+        loss_optical = F.cross_entropy(logits_per_optical, labels)
+        loss_radar   = F.cross_entropy(logits_per_radar, labels)
 
         # calculate loss
-        loss = (F.cross_entropy(logits_per_optical, labels) + F.cross_entropy(logits_per_radar, labels)) / 2
+        # loss = (F.cross_entropy(logits_per_optical, labels) + F.cross_entropy(logits_per_radar, labels)) / 2
+        loss = (loss_optical + loss_radar) / 2
         return loss
 
 
 class ViT(nn.Module):
-    def __init__(self,
-                 num_patches,
-                 dim=768,
-                 layers=12,
-                 attention_heads=16,
-                 in_channels=12,
-                 patch_size=8,
-                 ):
+    def __init__(
+            self,
+            num_patches,
+            dim=768,
+            layers=12,
+            attention_heads=16,
+            in_channels=12,
+            patch_size=8,
+        ):
         super().__init__()
         self.dim = dim
         self.layers = layers
@@ -462,10 +477,11 @@ class ViT(nn.Module):
         self.patch_size = patch_size
         pixels_per_patch = int(patch_size * patch_size * in_channels)
         self.linear_input = nn.Linear(pixels_per_patch, self.dim)
-        self.transformer = BaseTransformer(dim=self.dim,
-                                           layers=self.layers,
-                                           attention_heads=self.attention_heads,
-                                           )
+        self.transformer = BaseTransformer(
+            dim=self.dim,
+            layers=self.layers,
+            attention_heads=self.attention_heads,
+        )
 
     def forward(self, imgs, attn_bias, mask_info=None):
         x = rearrange(imgs, 'b c (h i) (w j) -> b (h w) (c i j)', i=self.patch_size, j=self.patch_size)
@@ -480,15 +496,16 @@ class ViT(nn.Module):
 
 
 class DecoderMAE(nn.Module):
-    def __init__(self,
-                 num_patches,
-                 encoder_dim=768,
-                 decoder_dim=768,
-                 decoder_layers=12,
-                 attention_heads=16,
-                 total_channels=14,
-                 patch_size=8,
-                 ):
+    def __init__(
+            self,
+            num_patches,
+            encoder_dim=768,
+            decoder_dim=768,
+            decoder_layers=12,
+            attention_heads=16,
+            total_channels=14,
+            patch_size=8,
+        ):
         super().__init__()
         self.decoder_dim = decoder_dim
         self.decoder_layers = decoder_layers
@@ -506,35 +523,61 @@ class DecoderMAE(nn.Module):
         decoder_pos_embed = get_2d_sincos_pos_embed(self.decoder_pos_embed.shape[-1], int(num_patches ** .5), cls_token=False)
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
         pixels_per_patch = int(patch_size * patch_size * total_channels)
-        self.linear_output = nn.Linear(self.decoder_dim, pixels_per_patch)
+        print('pixels_per_patch', pixels_per_patch)
+        # self.linear_output = nn.Linear(
+        #     self.decoder_dim,
+        #     pixels_per_patch
+        # )
+        self.linear_output = nn.Linear(
+            self.decoder_dim,
+            pixels_per_patch
+        )
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.decoder_dim))
         torch.nn.init.normal_(self.mask_token, std=.02)
 
     def forward(self, x, mask_info_radar, mask_info_optical, target):
         # prepare inputs for decoder
         x = self.encoder_to_decoder(x)
+        print('x (prepped for decoder)', x.shape)
+
         mask_tokens = self.mask_token.repeat(x.shape[0], mask_info_radar['ids_restore'].shape[1] + 1 - x.shape[1], 1)
         x = torch.cat([x, mask_tokens], dim=1)
         x = torch.gather(x, dim=1, index=mask_info_radar['ids_restore'].unsqueeze(-1).repeat(1, 1, x.shape[2]))
+        
+        
 
         # decode embeddings
         x = x + self.decoder_pos_embed
         x = self.linear_output(self.decoder(x))
-
+    
         # split pixel predictions into optical and radar
-        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
-        pred_optical = rearrange(pred[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
-        pred_radar = rearrange(pred[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
-
+        # pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
+        # pred_optical = rearrange(pred[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
+        # pred_radar = rearrange(pred[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
+        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
+        pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
+        pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        
+        print('x', x.shape)
+        print('pred', pred.shape)
+        print('pred_optical', pred_optical.shape)
+        print('pred_radar', pred_radar.shape)
+        print('target', target.shape)
+        
         # apply patch-wise normalization
         mean = target.mean(dim=-1, keepdim=True)
         var = target.var(dim=-1, keepdim=True)
         target = (target - mean) / (var + 1.e-6) ** .5
+        
 
         # split target into optical and radar
-        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
-        target_optical = rearrange(target[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
-        target_radar = rearrange(target[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
+        # target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
+        # target_optical = rearrange(target[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
+        # target_radar = rearrange(target[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
+        
+        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
+        target_optical = rearrange(target[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
+        target_radar = rearrange(target[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
 
         # calculate optical reconstruction loss
         loss_optical = (pred_optical - target_optical) ** 2
