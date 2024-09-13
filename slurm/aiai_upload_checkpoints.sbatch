@@ -31,6 +31,9 @@ find "$LSCRATCH" -type f -name "$PATTERN" | while read -r FILE_PATH; do
     UPLOAD_URL="$BASE_URL/checkpoints/$RELATIVE_PATH"
     
     # Execute the curl command to upload the file
-    echo "Uploading $FILE_PATH to $UPLOAD_URL"
-    curl -X PUT -L "$UPLOAD_URL" --data-binary "@$FILE_PATH"
+    echo "Presigning $FILE_PATH to $UPLOAD_URL"
+    PRESIGNED_URL=${curl -s $UPLOAD_URL}
+
+    echo "Uploading $FILE_PATH to $RELATIVE_PATH"
+    curl -X PUT -L "$PRESIGNED" --data-binary "@$FILE_PATH"
 done
