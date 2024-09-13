@@ -25,9 +25,9 @@ PATTERN="*.pth"
 BASE_URL="https://hpie463z6jkcbdddih7sa4liwa0nuvvo.lambda-url.us-east-2.on.aws"
 
 # Find and upload files
-find "$DIRECTORY" -type f -name "$PATTERN" | while read -r FILE_PATH; do
+find "$LSCRATCH" -type f -name "$PATTERN" | while read -r FILE_PATH; do
     # Construct the URL using the file path relative to the base directory
-    RELATIVE_PATH="${FILE_PATH#$DIRECTORY/}"
+    RELATIVE_PATH="${FILE_PATH#$LSCRATCH/}"
     UPLOAD_URL="$BASE_URL/checkpoints/$RELATIVE_PATH"
     
     # Execute the curl command to upload the file
