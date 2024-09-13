@@ -28,7 +28,7 @@ BASE_URL="https://hpie463z6jkcbdddih7sa4liwa0nuvvo.lambda-url.us-east-2.on.aws"
 find "$DIRECTORY" -type f -name "$PATTERN" | while read -r FILE_PATH; do
     # Construct the URL using the file path relative to the base directory
     RELATIVE_PATH="${FILE_PATH#$DIRECTORY/}"
-    UPLOAD_URL="$BASE_URL/$RELATIVE_PATH"
+    UPLOAD_URL="$BASE_URL/checkpoints/$RELATIVE_PATH"
     
     # Execute the curl command to upload the file
     echo "Uploading $FILE_PATH to $UPLOAD_URL"
