@@ -1,5 +1,6 @@
 ### project
 
+dataset/
 logs/
 checkpoints/
 scale_alibi/dataset/download.py
