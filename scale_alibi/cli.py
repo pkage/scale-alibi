@@ -5,8 +5,15 @@ import mercantile
 import pendulum
 import numpy as np
 from pathlib import Path
+from rich.table import Table
+from rich import box
+import torch.multiprocessing as mp
+from torch import cuda
+import torch.distributed as dist
 
-from . import console
+from .train import CromaParams, TrainParams, cleanup, croma_train
+
+from . import console, pprint
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
 from .dataset.tile import (
     convert_to_png_sar_tiles,
@@ -32,6 +39,24 @@ def cli():
 @cli.command('debug', help='debug hook')
 def cli_debug():
     ...
+
+@cli.command('hardware', help='show hardware status')
+def cli_hardware():
+
+    def available(flag):
+        if flag:
+            return '[green]available[/]'
+        return '[red]unavailable[/]'
+
+    table = Table('feature', 'status', show_edge=False)
+
+    table.add_row('cuda', available(cuda.is_available()))
+    table.add_row('cuda/devices', f'{cuda.device_count()}')
+    table.add_row('dist', available(dist.is_available()))
+    table.add_row('dist/nccl', available(dist.is_nccl_available()))
+    table.add_row('dist/gloo', available(dist.is_gloo_available()))
+
+    console.print(table)
 
 @cli.group('download')
 def download():
@@ -282,6 +307,7 @@ def raster_tile_download_split(input, archive, output, n_splits, n_merges, worke
 
     console.log(f'wrote {len(subarrs)} chunks with ~{subarrs[0].shape[0]} tiles each,\nthen {len(submerges)} sub-merge operations ({len(submerges[0])} files each) before final merge')
 
+
 @raster.command('tile-filter', help='filter out tiles with alpha channels from a tileset')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
@@ -294,3 +320,79 @@ def raster_tile_filter(input, output, max_alpha):
         output,
         threshold=max_alpha
     )
+
+
+# --- CROMA ---
+@cli.group('croma', help='commands for reproducing CROMA results')
+def croma():
+    pass
+
+@croma.command('train', help='train the full embedder/decoder network')
+@click.option('--lores', type=click.Path(readable=True), required=True, help='low resolution visual path (sentinel-2)')
+@click.option('--radar', type=click.Path(readable=True), required=True, help='SAR path (sentinel-1)')
+@click.option('--ckpts', type=click.Path(dir_okay=True, file_okay=False), required=True, help='path to write checkpoints to')
+@click.option('--run-name', type=str, required=True, help='run name')
+@click.option('--run-group', type=str, default='croma', help='run group (for wandb)')
+@click.option('-l', '--learning-rate', type=float, required=True, help='learning rate (Adam)')
+@click.option('-e', '--epochs', type=int, required=True, help='epoch count')
+@click.option('-b', '--batch-size', type=int, required=True, help='batch size')
+@click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
+@click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
+@click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='mask ratio (ratio of patches to keep)')
+@click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
+def cli_croma_train( # rename so it doesn't clash
+        lores,
+        radar,
+        ckpts,
+        run_name,
+        run_group,
+        learning_rate,
+        epochs,
+        batch_size,
+        device,
+        mask_ratio,
+        nccl_bind,
+        amp
+    ):
+
+    ckpts = Path(ckpts)
+    ckpts.mkdir(exist_ok=True, parents=True)
+
+    croma_params = CromaParams(
+        lores_dataset_path=Path(lores),
+        radar_dataset_path=Path(radar),
+
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        mask_ratio=mask_ratio,
+        epochs=epochs
+    )
+    train_params = TrainParams(
+        checkpoint_dir=ckpts,
+        run_name=run_name,
+        device=device,
+        amp=amp,
+        nccl_bind=nccl_bind
+    )
+
+
+    console.print('parsed parameters:')
+    pprint(croma_params)
+
+    world_size = cuda.device_count()
+    console.print(f'using world size of {world_size}')
+
+
+    mp.spawn(
+        croma_train,
+        (
+            world_size,
+            croma_params,
+            train_params
+        ),
+        nprocs=world_size,
+        join=True
+    )
+
+    cleanup()
+

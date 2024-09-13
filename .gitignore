@@ -1,10 +1,13 @@
 ### project
 
+logs/
+checkpoints/
 scale_alibi/dataset/download.py
 viewer/public/rasters/
 viewer/public/rasters
 rasters/
 blobs/
+wandb/
 .DS_Store
 *.tif
 *.pmtile

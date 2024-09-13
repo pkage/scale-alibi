@@ -14,14 +14,21 @@
 #SBATCH --chdir=/home/s1734411/scale-alibi/
 
 export PROJ_DIR=/home/s1734411/scale-alibi/
-export LSCRATCH=/disk/scratch/s1734411
+export LSCRATCH=/disk/scratch/s1734411/salibi
+
+mkdir -p $LSCRATCH/checkpoints/croma_small
 
 cd $PROJ_DIR
 
 # load python, ensure the env is installed
 export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
-poetry install
+if [ ! -d .venv ]; then
+    python3 -m venv .venv
+fi
+source .venv/bin/activate
+pip install -e .
+
 
 # check that we've got our vit model checkpoint....
 # if ! [ -f ./IN1K-vit.h.14-300e.pth.tar ]; then
@@ -39,12 +46,18 @@ source .env
 
 # kickoff
 echo "beginning training..."
-poetry run wandb offline
-poetry run torchrun \
-    --nproc_per_node 1 \
-    main_ddp.py \
-    --vit-ckpt ./IN1K-vit.h.14-300e.pth.tar \
-    --batch_size 32 \
-    --test_batch_size 32 \
-    --epochs 200 \
-    --learning_rate 0.001 # 1e-3
+wandb offline
+
+salibi hardware
+
+
+salibi croma train \
+	--lores $LSCRATCH/datasets/visual_tiles_small.pmtile \
+	--radar $LSCRATCH/datasets/sar_tiles_small.pmtile \
+	--ckpts $LSCRATCH/checkpoints/croma_small \
+	--run-name croma_small \
+	--learning-rate 1e-4 \
+	--epochs 100 \
+	--batch-size 32 \
+	--mask-ratio 0.4 \
+	--device cpu

@@ -13,7 +13,7 @@
 #SBATCH --chdir=/home/s1734411/scale-alibi/
 
 export PROJ_DIR=/home/s1734411/scale-alibi/
-export LSCRATCH=/disk/scratch/s1734411/salibi/
+export LSCRATCH=/disk/scratch/s1734411/salibi/datasets
 
 mkdir -p $LSCRATCH
 

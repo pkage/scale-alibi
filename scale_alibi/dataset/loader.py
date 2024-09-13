@@ -15,6 +15,7 @@ from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.io.rasterio import Reader
 from rio_tiler.models import ImageData
 import einops
+from pathlib import Path
 from .tile import get_tile_schedule
 
 import numpy as np
@@ -142,12 +143,12 @@ class PMTileDataset(TileIdDataset):
     transform: Any
 
 
-    def __init__(self, sample_tiles: str, transform=None):
+    def __init__(self, sample_tiles: str | Path, transform=None):
         '''
         Initialize a new pmtile dataset.
 
         :param sample_tiles: tile archive (filename)
-        :type sample_tiles: str
+        :type sample_tiles: str | Path
         :param transform: Transform to use for the samples
         :type transform: Any
         '''

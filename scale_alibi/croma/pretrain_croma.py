@@ -164,11 +164,11 @@ class CROMA(nn.Module):
         )
 
         # reconstruct both sensors
-        print('radar shape', radar_imgs.shape)
-        print('optical shape', optical_imgs.shape)
+        # print('radar shape', radar_imgs.shape)
+        # print('optical shape', optical_imgs.shape)
         
         imgs, _ = pack([optical_imgs, radar_imgs], 'b * h w')
-        print('imgs shape', imgs.shape)
+        # print('imgs shape', imgs.shape)
         # print('ps', ps)
         # imgs = None
         patchified_imgs = rearrange(imgs, 'b c (h i) (w j) -> b (h w) (c i j)', i=self.patch_size, j=self.patch_size)
@@ -523,7 +523,7 @@ class DecoderMAE(nn.Module):
         decoder_pos_embed = get_2d_sincos_pos_embed(self.decoder_pos_embed.shape[-1], int(num_patches ** .5), cls_token=False)
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
         pixels_per_patch = int(patch_size * patch_size * total_channels)
-        print('pixels_per_patch', pixels_per_patch)
+        # print('pixels_per_patch', pixels_per_patch)
         # self.linear_output = nn.Linear(
         #     self.decoder_dim,
         #     pixels_per_patch
@@ -538,7 +538,7 @@ class DecoderMAE(nn.Module):
     def forward(self, x, mask_info_radar, mask_info_optical, target):
         # prepare inputs for decoder
         x = self.encoder_to_decoder(x)
-        print('x (prepped for decoder)', x.shape)
+        # print('x (prepped for decoder)', x.shape)
 
         mask_tokens = self.mask_token.repeat(x.shape[0], mask_info_radar['ids_restore'].shape[1] + 1 - x.shape[1], 1)
         x = torch.cat([x, mask_tokens], dim=1)
@@ -558,11 +558,11 @@ class DecoderMAE(nn.Module):
         pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
         pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
         
-        print('x', x.shape)
-        print('pred', pred.shape)
-        print('pred_optical', pred_optical.shape)
-        print('pred_radar', pred_radar.shape)
-        print('target', target.shape)
+        # print('x', x.shape)
+        # print('pred', pred.shape)
+        # print('pred_optical', pred_optical.shape)
+        # print('pred_radar', pred_radar.shape)
+        # print('target', target.shape)
         
         # apply patch-wise normalization
         mean = target.mean(dim=-1, keepdim=True)
