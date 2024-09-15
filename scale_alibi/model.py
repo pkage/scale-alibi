@@ -1,5 +1,5 @@
-# original file: https://github.com/antofuller/CROMA/blob/main/pretrain_croma.py
-# modified to increase patch size and work on 256x256 images
+# based heavily on the implementation here: https://github.com/antofuller/CROMA/blob/main/pretrain_croma.py
+# this is mostly in the 
 
 import torch
 import numpy as np
@@ -11,7 +11,7 @@ from torch import nn, einsum
 from einops import rearrange, pack
 from PIL import Image
 
-class CROMA(nn.Module):
+class ScaleAlibi(nn.Module):
     def __init__(
             self,
             patch_size=8,
@@ -70,6 +70,12 @@ class CROMA(nn.Module):
             nn.GELU(),
             nn.Linear(int(4*self.encoder_dim), self.encoder_dim)
         )
+        self.GAP_FFN_hires = nn.Sequential(
+            nn.LayerNorm(self.encoder_dim),
+            nn.Linear(self.encoder_dim, int(4*self.encoder_dim)),
+            nn.GELU(),
+            nn.Linear(int(4*self.encoder_dim), self.encoder_dim)
+        )
 
         self.decoder = DecoderMAE(
             num_patches=self.num_patches,
@@ -86,6 +92,7 @@ class CROMA(nn.Module):
             attention_heads=self.attention_heads,
             num_patches=self.num_patches
         )
+        
 
         self.global_contrast_loss = ContrastLossInput(
             projection_input=self.encoder_dim,
@@ -93,7 +100,17 @@ class CROMA(nn.Module):
         )
 
 
-    def forward(self, radar_imgs, optical_imgs, radar_mask_info, optical_mask_info, rank, world_size):
+    def forward(
+            self,
+            radar_imgs,
+            optical_imgs,
+            # hires_imgs,
+            radar_mask_info,
+            optical_mask_info,
+            # hires_mask_info,
+            rank,
+            world_size
+        ):
         # split stacked image into optical and radar
         #radar_imgs = imgs[:, 12:, ...]
         #optical_imgs = imgs[:, :12, ...]
@@ -118,6 +135,17 @@ class CROMA(nn.Module):
             masked_seq_len=optical_mask_info['len_keep'],
             attention_heads=self.attention_heads
         )
+        
+        # hires_masked_attn_bias = apply_mask_to_alibi(
+        #     alibi=self.attn_bias.to(optical_imgs.device),
+        #     ids_keep_queries=optical_mask_info['ids_keep'],
+        #     ids_keep_keys=optical_mask_info['ids_keep'],
+        #     batch_size=radar_imgs.shape[0],
+        #     orig_seq_len=self.num_patches,
+        #     masked_seq_len=optical_mask_info['len_keep'],
+        #     attention_heads=self.attention_heads
+        # )
+
 
         # encode each sensor independently
         radar_encodings = self.radar_encoder(
@@ -130,6 +158,8 @@ class CROMA(nn.Module):
             attn_bias=optical_masked_attn_bias,
             mask_info=optical_mask_info
         )
+        print('optical encodings', optical_encodings.shape)
+        print('radar_encodings', radar_encodings.shape)
 
         # create unimodal representations with an FFN
         radar_GAP = self.GAP_FFN_radar(
@@ -592,3 +622,4 @@ class DecoderMAE(nn.Module):
 
         loss = loss_optical + loss_radar
         return loss
+

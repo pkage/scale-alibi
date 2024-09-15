@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-MultimodalSample = namedtuple('MultimodalSample', ['radar', 'lores', 'hires', 'tile_id'])
+MultimodalSample = namedtuple('MultimodalSample', ['radar', 'lores', 'hires', 'hir4x', 'tile_id'])
 LoresMultimodalSample = namedtuple('LoresMultimodalSample', ['radar', 'lores', 'tile_id'])
 
 # --- HELPERS ---
@@ -32,6 +32,16 @@ def get_tile_list(source) -> List[int]:
     tile_list = [zxy_to_tileid(z,x,y) for (z,x,y), _ in all_tiles(source)]
 
     return tile_list
+
+
+def get_children_tile_ids(tile_id: int) -> List[int]:
+    z,x,y = tileid_to_zxy(tile_id)
+    
+    # make the children tiles
+    children_tiles = mercantile.children(mercantile.Tile(z=z, x=x, y=y))
+    tile_ids = [ zxy_to_tileid(t.z, t.x, t.y) for t in children_tiles ]
+
+    return tile_ids
 
 
 def image_bytes_to_array(img_bytes: bytes) -> np.ndarray:
@@ -48,6 +58,7 @@ def numpy_bytes_to_array(np_bytes: bytes) -> np.ndarray:
     )
 
     return arr
+
 
 # --- LOADERS ---
 
@@ -138,6 +149,7 @@ class PMTileDataset(TileIdDataset):
     tile_filename: str
     tile_reader: PMReader
 
+    tile_ids: List[int]
     tile_type: TileType
 
     transform: Any
@@ -209,6 +221,65 @@ class PMTileDataset(TileIdDataset):
         )
 
 
+class PMTile4xDataset(PMTileDataset):
+    '''
+    Literally exactly the same as PMTileDataset except gets 4 subtiles and stitches them together
+    '''
+
+    def __init__(self, source_dataset: PMTileDataset):
+
+        # copy the tiles
+        self.tile_filename = source_dataset.tile_filename
+        self.tile_reader   = source_dataset.tile_reader
+        self.tile_type     = source_dataset.tile_type
+        self.transform     = source_dataset.transform
+        self.tile_ids      = source_dataset.tile_ids
+
+
+    def get_by_tile_id_raw(self, tile_id) -> np.ndarray:
+        z, x, y = tileid_to_zxy(tile_id)
+
+        # load the bytes of the images
+        tile_bytes = self.tile_reader.get(z, x, y)
+
+        # right now we're not handling unknown data
+        return image_bytes_to_array(tile_bytes)
+
+
+
+    def get_by_tile_id(self, tile_id) -> np.ndarray:
+        # top-left, top-right, bottom-right, bottom-left
+        top_left, top_right, bottom_right, bottom_left = get_children_tile_ids(tile_id)
+
+        top_left     = self.get_by_tile_id_raw( top_left )
+        top_right    = self.get_by_tile_id_raw( top_right )
+        bottom_right = self.get_by_tile_id_raw( bottom_right )
+        bottom_left  = self.get_by_tile_id_raw( bottom_left )
+
+        # load the bytes of the images
+        top_row, _ = einops.pack(
+            [top_left, top_right],
+            'h * c'
+        )
+        bottom_row, _ = einops.pack(
+            [bottom_left, bottom_right],
+            'h * c'
+        )
+
+        tile_arr, _ = einops.pack(
+            [top_row, bottom_row],
+            '* w c'
+        )
+
+        return self._apply_transform(tile_arr)
+
+    
+    def __getitem__(self, index) -> np.ndarray:
+        # first, get the tileid
+        tile_id = self.tile_ids[index]
+        return self.get_by_tile_id(tile_id)
+
+
 # --- MULTI-MODAL ACCESSORS ---
 
 class TileUnionDataset(TileIdDataset):
@@ -223,6 +294,7 @@ class TileUnionDataset(TileIdDataset):
         self.transform = transform
         self.datasets = datasets
         self.recalculate_tile_list()
+
 
     def recalculate_tile_list(self):
         # calculate all tiles available in dataset
@@ -291,6 +363,7 @@ class LoresMultimodalDataset(TileIdDataset):
 class MultimodalDataset(TileIdDataset):
     radar_datasets: TileIdDataset
     hires_datasets: TileIdDataset
+    hir4x_datasets: TileIdDataset
     lores_datasets: TileIdDataset
 
     def __init__(
@@ -298,12 +371,14 @@ class MultimodalDataset(TileIdDataset):
             radar_datasets: TileIdDataset,
             lores_datasets: TileIdDataset,
             hires_datasets: TileIdDataset,
+            hir4x_datasets: TileIdDataset,
             transform=None
         ):
         super().__init__(transform=transform)
         self.radar_datasets = radar_datasets
         self.lores_datasets = lores_datasets
         self.hires_datasets = hires_datasets
+        self.hir4x_datasets = hir4x_datasets
 
         self.recalculate_tile_list()
 
@@ -317,11 +392,15 @@ class MultimodalDataset(TileIdDataset):
         self.tile_ids.sort() # sort by ID to ensure reproducibility
 
 
+        
+        
+
     def get_by_tile_id(self, tile_id) -> MultimodalSample:
         sample = MultimodalSample(
             radar=self.radar_datasets.get_by_tile_id(tile_id),
             lores=self.lores_datasets.get_by_tile_id(tile_id),
             hires=self.hires_datasets.get_by_tile_id(tile_id),
+            hir4x=self.hir4x_datasets.get_by_tile_id(tile_id),
             tile_id=tile_id
         )
     
@@ -402,6 +481,7 @@ class RescaleImageData:
         image_data.rescale(in_range=((data_min, data_max),),)
 
         return image_data
+
 
 class ImageDataToNumpy:
     '''Convert ImageData to numpy, in (row, col, band) order'''
