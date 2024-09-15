@@ -11,6 +11,7 @@ from torch import nn, einsum
 from einops import rearrange, pack
 from PIL import Image
 
+
 class ScaleAlibi(nn.Module):
     def __init__(
             self,
@@ -20,7 +21,7 @@ class ScaleAlibi(nn.Module):
             attention_heads=16,
             decoder_dim=512,
             decoder_layers=1,
-            total_channels=14,
+            total_channels=8,
             num_patches=225,
         ):
         super().__init__()
@@ -329,7 +330,7 @@ class ScaleAlibi(nn.Module):
             x=joint_encodings,
             mask_info_radar=radar_mask_info,
             mask_info_optical=optical_mask_info,
-            mask_info_hires=hires_mask_info,
+            mask_info_hires=hires_mask_info, # will need to munge this
             target=patchified_imgs,
         )
 
@@ -569,7 +570,7 @@ def get_scale_alibi(attention_heads, num_patches, scale_multiplier=1.0):
     return bias.unsqueeze(0)  # (1, attention_heads, num_patches, num_patches)
 
 
-def get_mask(bsz, seq_len, device, mask_ratio):
+def get_mask(bsz, seq_len, device, mask_ratio, downsize_for_mae=False):
     len_keep = int(seq_len * (1 - mask_ratio))
     noise = torch.rand(bsz, seq_len, device=device)  # noise in [0, 1]
     ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
@@ -581,11 +582,30 @@ def get_mask(bsz, seq_len, device, mask_ratio):
     mask_info = {
         'ids_restore': ids_restore,
         'ids_keep': ids_keep,
-        'len_keep': len_keep,
-        'mask_for_mae': mask
+        'len_keep': len_keep
     }
+    
+    if downsize_for_mae:
+        side_len = int(math.sqrt(mask.shape[1]))
+        
+        # mask = torch.reshape(mask, (side_len, side_len))
+        masks = []
+        for i in range(mask.shape[0]):
+            masks.append(F.max_pool2d(
+                mask[i,:].reshape((side_len,side_len)).unsqueeze(0).unsqueeze(0).float(),
+                kernel_size=2,
+                stride=2
+            ).flatten())
+        
+        mask_info['mask_for_mae'], _ = pack(masks, '* w')
+    else:
+        mask_info['mask_for_mae'] = mask
+
     return mask_info
 
+
+def create_downsampled_mask(mask):
+    mask_for_mae = mask['mask_for_mae']
 
 def apply_mask_to_sequence(x, ids_keep):
     return torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.shape[-1]))
@@ -757,7 +777,7 @@ class DecoderMAE(nn.Module):
             decoder_dim=768,
             decoder_layers=12,
             attention_heads=16,
-            total_channels=14,
+            total_channels=8,
             patch_size=8,
         ):
         super().__init__()
@@ -777,7 +797,10 @@ class DecoderMAE(nn.Module):
         decoder_pos_embed = get_2d_sincos_pos_embed(self.decoder_pos_embed.shape[-1], int(num_patches ** .5), cls_token=False)
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
         pixels_per_patch = int(patch_size * patch_size * total_channels)
-        # print('pixels_per_patch', pixels_per_patch)
+        # print(calculated
+        print('total_channels', total_channels)
+        print('patch_size', patch_size)
+        print('pixels_per_patch', pixels_per_patch)
         # self.linear_output = nn.Linear(
         #     self.decoder_dim,
         #     pixels_per_patch
@@ -786,10 +809,11 @@ class DecoderMAE(nn.Module):
             self.decoder_dim,
             pixels_per_patch
         )
+        
         self.mask_token = nn.Parameter(torch.zeros(1, 1, self.decoder_dim))
         torch.nn.init.normal_(self.mask_token, std=.02)
 
-    def forward(self, x, mask_info_radar, mask_info_optical, target):
+    def forward(self, x, mask_info_radar, mask_info_optical, mask_info_hires, target):
         # prepare inputs for decoder
         x = self.encoder_to_decoder(x)
         # print('x (prepped for decoder)', x.shape)
@@ -798,11 +822,13 @@ class DecoderMAE(nn.Module):
         x = torch.cat([x, mask_tokens], dim=1)
         x = torch.gather(x, dim=1, index=mask_info_radar['ids_restore'].unsqueeze(-1).repeat(1, 1, x.shape[2]))
         
-        
+        print('pre-decoded x', x.shape)
 
         # decode embeddings
         x = x + self.decoder_pos_embed
         x = self.linear_output(self.decoder(x))
+        
+        print('pred shape', x.shape)
     
         # split pixel predictions into optical and radar
         # pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
@@ -810,7 +836,8 @@ class DecoderMAE(nn.Module):
         # pred_radar = rearrange(pred[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
         pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=8, i=16, j=16, h=16, w=16)
         pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
-        pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        pred_radar = rearrange(pred[:, 3:5, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        pred_hires = rearrange(pred[:, 5:,  :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
         
         # print('x', x.shape)
         # print('pred', pred.shape)
@@ -829,9 +856,10 @@ class DecoderMAE(nn.Module):
         # target_optical = rearrange(target[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
         # target_radar = rearrange(target[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
         
-        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
+        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=8, i=16, j=16, h=16, w=16)
         target_optical = rearrange(target[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
-        target_radar = rearrange(target[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        target_radar = rearrange(target[:, 3:5, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        target_hires = rearrange(target[:, 5:,  :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
 
         # calculate optical reconstruction loss
         loss_optical = (pred_optical - target_optical) ** 2
@@ -843,6 +871,13 @@ class DecoderMAE(nn.Module):
         loss_radar = loss_radar.mean(dim=-1)  # [N, L], mean loss per patch
         loss_radar = (loss_radar * mask_info_radar['mask_for_mae']).sum() / mask_info_radar['mask_for_mae'].sum()  # mean loss on removed patches
 
-        loss = loss_optical + loss_radar
+        print('mask_info_radar.mask_for_mae', mask_info_radar['mask_for_mae'], mask_info_radar['mask_for_mae'].shape)
+        print('mask_info_hires.mask_for_mae', mask_info_hires['mask_for_mae'], mask_info_hires['mask_for_mae'].shape)
+        
+        loss_hires = (pred_hires - target_hires) ** 2
+        loss_hires = loss_hires.mean(dim=-1)  # [N, L], mean loss per patch
+        loss_hires = (loss_hires * mask_info_hires['mask_for_mae']).sum() / mask_info_hires['mask_for_mae'].sum()  # mean loss on removed patches
+        
+        loss = loss_optical + loss_radar + loss_hires
         return loss
 
