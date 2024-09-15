@@ -46,7 +46,8 @@ def get_children_tile_ids(tile_id: int) -> List[int]:
 
 def image_bytes_to_array(img_bytes: bytes) -> np.ndarray:
     img = Image.open(
-        BytesIO(img_bytes)
+        BytesIO(img_bytes),
+        formats=['PNG', 'JPEG']
     )
 
     return np.array(img, dtype=np.uint8)

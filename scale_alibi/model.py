@@ -51,6 +51,15 @@ class ScaleAlibi(nn.Module):
             in_channels=3, # RGB lores optical
             patch_size=self.patch_size,
         )
+        self.hires_encoder = ViT(
+            num_patches=self.num_patches,
+            dim=self.encoder_dim,
+            layers=self.encoder_layers,
+            attention_heads=self.attention_heads,
+            # in_channels=12,
+            in_channels=3, # RGB hires optical
+            patch_size=self.patch_size,
+        )
 
         self.cross_encoder = BaseTransformerCrossAttn(
             dim=self.encoder_dim,
@@ -88,11 +97,21 @@ class ScaleAlibi(nn.Module):
         )
 
         # extension point: implement scale-alibi attention
-        self.attn_bias = get_alibi(
+        print('generating patches...')
+        self.attn_bias = get_scale_alibi(
             attention_heads=self.attention_heads,
             num_patches=self.num_patches
         )
-        
+        print('attn bias', self.attn_bias.shape)
+        print('generating hires patches...')
+        self.attn_bias_hires = get_scale_alibi(
+            attention_heads=self.attention_heads,
+            num_patches=self.num_patches * 4,
+            scale_multiplier=0.5
+        )
+        print('attn bias hires', self.attn_bias_hires.shape)
+        print('attn bias hires (strided)', self.attn_bias_hires[:,:,:,::4].shape)
+        print('it is done')
 
         self.global_contrast_loss = ContrastLossInput(
             projection_input=self.encoder_dim,
@@ -104,10 +123,10 @@ class ScaleAlibi(nn.Module):
             self,
             radar_imgs,
             optical_imgs,
-            # hires_imgs,
+            hires_imgs,
             radar_mask_info,
             optical_mask_info,
-            # hires_mask_info,
+            hires_mask_info,
             rank,
             world_size
         ):
@@ -136,15 +155,15 @@ class ScaleAlibi(nn.Module):
             attention_heads=self.attention_heads
         )
         
-        # hires_masked_attn_bias = apply_mask_to_alibi(
-        #     alibi=self.attn_bias.to(optical_imgs.device),
-        #     ids_keep_queries=optical_mask_info['ids_keep'],
-        #     ids_keep_keys=optical_mask_info['ids_keep'],
-        #     batch_size=radar_imgs.shape[0],
-        #     orig_seq_len=self.num_patches,
-        #     masked_seq_len=optical_mask_info['len_keep'],
-        #     attention_heads=self.attention_heads
-        # )
+        hires_masked_attn_bias = apply_mask_to_alibi(
+            alibi=self.attn_bias_hires.to(hires_imgs.device),
+            ids_keep_queries=hires_mask_info['ids_keep'],
+            ids_keep_keys=hires_mask_info['ids_keep'],
+            batch_size=radar_imgs.shape[0],
+            orig_seq_len=self.num_patches * 4,
+            masked_seq_len=hires_mask_info['len_keep'],
+            attention_heads=self.attention_heads
+        )
 
 
         # encode each sensor independently
@@ -158,8 +177,15 @@ class ScaleAlibi(nn.Module):
             attn_bias=optical_masked_attn_bias,
             mask_info=optical_mask_info
         )
+        hires_encodings = self.hires_encoder(
+            imgs=hires_imgs,
+            attn_bias=hires_masked_attn_bias,
+            mask_info=hires_mask_info
+        )
+        
         print('optical encodings', optical_encodings.shape)
-        print('radar_encodings', radar_encodings.shape)
+        print('radar encodings', radar_encodings.shape)
+        print('hires encodings', hires_encodings.shape)
 
         # create unimodal representations with an FFN
         radar_GAP = self.GAP_FFN_radar(
@@ -168,17 +194,29 @@ class ScaleAlibi(nn.Module):
         optical_GAP = self.GAP_FFN_optical(
             optical_encodings.mean(dim=1)
         )
+        hires_GAP = self.GAP_FFN_optical( # projects down again
+            hires_encodings.mean(dim=1)
+        )
+        
+        print('optical gap encodings', optical_GAP.shape)
+        print('radar gap encodings', radar_GAP.shape)
+        print('hires gap encodings', hires_GAP.shape)
+        
+
 
         # perform contrastive loss on unimodal representations
         contrastive_loss = self.global_contrast_loss(
             radar_features=radar_GAP,
             optical_features=optical_GAP,
+            hires_features=hires_GAP,
             world_size=world_size,
             rank=rank
         )
+        print(contrastive_loss)
 
+        # two step cross attention: first do radar and optical
         # create cross attention bias and create joint multimodal encodings
-        cross_attn_bias = apply_mask_to_alibi(
+        cross_attn_1_bias = apply_mask_to_alibi(
             alibi=self.attn_bias.to(radar_imgs.device),
             ids_keep_queries=radar_mask_info['ids_keep'],
             ids_keep_keys=optical_mask_info['ids_keep'],
@@ -188,17 +226,101 @@ class ScaleAlibi(nn.Module):
             attention_heads=self.attention_heads
         )
 
-        joint_encodings = self.cross_encoder(
+        print('cross_attn_1_bias', cross_attn_1_bias.shape)
+        joint_encodings_radar_lores = self.cross_encoder(
             x=radar_encodings,
             context=optical_encodings,
-            alibi=cross_attn_bias
+            self_alibi=cross_attn_1_bias,
+            cross_alibi=cross_attn_1_bias
         )
+        print('joint_encodings_radar_lores', joint_encodings_radar_lores.shape)
+        print('hires_encodings', hires_encodings.shape)
+        
+        # step 2 : do radar/lores and optical
+        
+#         cross_attn_2_bias = apply_mask_to_alibi(
+#             alibi=self.attn_bias_hires[:,:,:,::4].to(radar_imgs.device),
+#             ids_keep_queries=optical_mask_info['ids_keep'],
+#             ids_keep_keys=hires_mask_info['ids_keep'],
+#             batch_size=radar_imgs.shape[0],
+#             orig_seq_len=self.num_patches,
+#             masked_seq_len=optical_mask_info['len_keep'],
+#             attention_heads=self.attention_heads
+#         )
 
-        # reconstruct both sensors
+
+#         joint_encodings = self.cross_encoder(
+#             x=joint_encodings_radar_lores,
+#             context=hires_encodings,
+#             alibi=cross_attn_2_bias
+#         )
+#         print('joint_encodings', joint_encodings)
+
+        num_patches_hires = self.attn_bias_hires.shape[-1]  # Should be 1024
+
+        # Adjust the ALiBi tensor to match the original sequence lengths
+        alibi_adjusted = self.attn_bias_hires[:, :, :, ::4].to(radar_imgs.device)
+
+        # Now apply the modified function
+        # cross_attn_2_bias = apply_mask_to_alibi_variable_lengths(
+        #     alibi=alibi_adjusted,
+        #     ids_keep_queries=optical_mask_info['ids_keep'],  # Shape: [batch_size, masked_seq_len_queries]
+        #     ids_keep_keys=hires_mask_info['ids_keep'],       # Shape: [batch_size, masked_seq_len_keys]
+        #     batch_size=radar_imgs.shape[0],
+        #     orig_seq_len_queries=self.num_patches,           # e.g., 256
+        #     orig_seq_len_keys=self.num_patches,   # Since we sliced with ::4
+        #     masked_seq_len_queries=optical_mask_info['len_keep'],  # e.g., 128
+        #     masked_seq_len_keys=hires_mask_info['len_keep'],       # e.g., 512
+        #     attention_heads=self.attention_heads
+        # )
+        
+        # # Generate ALiBi for self-attention
+        # self_alibi = apply_mask_to_alibi_variable_lengths(
+        #     alibi=self.attn_bias.to(device),  # Original ALiBi tensor for self-attention
+        #     ids_keep_queries=optical_mask_info['ids_keep'],
+        #     ids_keep_keys=optical_mask_info['ids_keep'],
+        #     batch_size=radar_imgs.shape[0],
+        #     orig_seq_len_queries=self.num_patches,  # e.g., 256
+        #     orig_seq_len_keys=self.num_patches,     # Same as queries
+        #     masked_seq_len_queries=optical_mask_info['len_keep'],  # e.g., 128
+        #     masked_seq_len_keys=optical_mask_info['len_keep'],     # Same as queries
+        #     attention_heads=self.attention_heads
+        # )
+
+        # Generate cross-attention ALiBi tensor
+        cross_alibi = apply_mask_to_alibi_variable_lengths(
+            alibi=alibi_adjusted,  # Adjusted ALiBi tensor for cross-attention
+            ids_keep_queries=optical_mask_info['ids_keep'],
+            ids_keep_keys=hires_mask_info['ids_keep'],
+            batch_size=radar_imgs.shape[0],
+            orig_seq_len_queries=self.num_patches,             # e.g., 256
+            orig_seq_len_keys=self.num_patches,     # e.g., 256
+            masked_seq_len_queries=optical_mask_info['len_keep'],  # e.g., 128
+            masked_seq_len_keys=hires_mask_info['len_keep'],       # e.g., 512
+            attention_heads=self.attention_heads
+        )
+        # print('cross_attn_2_bias', cross_attn_2_bias.shape)
+
+        
+        
+        # Proceed with the cross-attention
+        joint_encodings = self.cross_encoder(
+            x=joint_encodings_radar_lores,
+            context=hires_encodings,
+            self_alibi=cross_attn_1_bias,
+            cross_alibi=cross_alibi
+        )
+        print('joint_encodings', joint_encodings.shape)
+
+
+        # reconstruct all sensors
         # print('radar shape', radar_imgs.shape)
         # print('optical shape', optical_imgs.shape)
         
-        imgs, _ = pack([optical_imgs, radar_imgs], 'b * h w')
+        # our hires target needs to be the same shape as the other images, so we'll need a downsampled target (blah)
+        hires_downsampled = hires_imgs[:,:,::2,::2]
+        
+        imgs, _ = pack([optical_imgs, radar_imgs, hires_downsampled], 'b * h w')
         # print('imgs shape', imgs.shape)
         # print('ps', ps)
         # imgs = None
@@ -207,6 +329,7 @@ class ScaleAlibi(nn.Module):
             x=joint_encodings,
             mask_info_radar=radar_mask_info,
             mask_info_optical=optical_mask_info,
+            mask_info_hires=hires_mask_info,
             target=patchified_imgs,
         )
 
@@ -251,6 +374,8 @@ class Attention(nn.Module):
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.attention_heads), (q, k, v))
         attention_scores = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         if alibi is not None:
+            print('attention_scores', attention_scores.shape)
+            print('alibi', alibi.shape)
             attention_scores = attention_scores + alibi
         attn = attention_scores.softmax(dim=-1)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
@@ -337,10 +462,10 @@ class BaseTransformerCrossAttn(nn.Module):
             ]))
         self.norm_out = nn.LayerNorm(dim)
 
-    def forward(self, x, context, alibi):
+    def forward(self, x, context, self_alibi=None, cross_alibi=None):
         for self_attn, cross_attn, ffn in self.layers:
-            x = self_attn(x, alibi) + x
-            x = cross_attn(x, context, alibi) + x
+            x = self_attn(x, self_alibi) + x
+            x = cross_attn(x, context, cross_alibi) + x
             x = ffn(x) + x
         x = self.norm_out(x)
         return x
@@ -379,12 +504,54 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     return emb
 
 
-def get_alibi(attention_heads, num_patches):
-    points = list(itertools.product(range(int(math.sqrt(num_patches))), range(int(math.sqrt(num_patches)))))
+# def get_alibi(attention_heads, num_patches):
+#     points = list(itertools.product(range(int(math.sqrt(num_patches))), range(int(math.sqrt(num_patches)))))
 
+#     print('points: ', len(points))
+    
+#     def get_slopes(n):
+#         def get_slopes_power_of_2(n):
+#             start = (2 ** (-2 ** -(math.log2(n) - 3)))
+#             ratio = start
+#             return [start * ratio ** i for i in range(n)]
+
+#         if math.log2(n).is_integer():
+#             return get_slopes_power_of_2(n)
+#         else:
+#             closest_power_of_2 = 2 ** math.floor(math.log2(n))
+#             return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
+#                                                                :n - closest_power_of_2]
+
+#     slopes = torch.Tensor(get_slopes(attention_heads)).unsqueeze(1)
+#     idxs = []
+#     for p1 in points:
+#         for p2 in points:
+#             dist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+#             idxs.append(dist * slopes * -1)
+#     all_bias = torch.cat(idxs, dim=1)
+#     return all_bias.view(1, attention_heads, num_patches, num_patches)
+
+
+def get_scale_alibi(attention_heads, num_patches, scale_multiplier=1.0):
+    grid_size = int(math.sqrt(num_patches))
+    coords = torch.stack(
+        torch.meshgrid(
+            torch.arange(grid_size),
+            torch.arange(grid_size),
+            indexing='ij'
+        ),
+        dim=-1
+    ).view(-1, 2).float()
+    # coords shape: (num_patches, 2)
+
+    # Compute pairwise distances
+    diff = coords.unsqueeze(1) - coords.unsqueeze(0)  # (num_patches, num_patches, 2)
+    dist = torch.norm(diff, dim=2)  # (num_patches, num_patches)
+    dist *= scale_multiplier
+        
     def get_slopes(n):
         def get_slopes_power_of_2(n):
-            start = (2 ** (-2 ** -(math.log2(n) - 3)))
+            start = 2 ** (-2 ** -(math.log2(n) - 3))
             ratio = start
             return [start * ratio ** i for i in range(n)]
 
@@ -392,17 +559,14 @@ def get_alibi(attention_heads, num_patches):
             return get_slopes_power_of_2(n)
         else:
             closest_power_of_2 = 2 ** math.floor(math.log2(n))
-            return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
-                                                               :n - closest_power_of_2]
+            return get_slopes_power_of_2(closest_power_of_2) + \
+                   get_slopes(2 * closest_power_of_2)[0::2][:n - closest_power_of_2]
 
-    slopes = torch.Tensor(get_slopes(attention_heads)).unsqueeze(1)
-    idxs = []
-    for p1 in points:
-        for p2 in points:
-            dist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-            idxs.append(dist * slopes * -1)
-    all_bias = torch.cat(idxs, dim=1)
-    return all_bias.view(1, attention_heads, num_patches, num_patches)
+    slopes = torch.Tensor(get_slopes(attention_heads)).unsqueeze(1).unsqueeze(1)  # (attention_heads, 1, 1)
+
+    bias = dist.unsqueeze(0) * slopes * -1  # (attention_heads, num_patches, num_patches)
+
+    return bias.unsqueeze(0)  # (1, attention_heads, num_patches, num_patches)
 
 
 def get_mask(bsz, seq_len, device, mask_ratio):
@@ -427,8 +591,15 @@ def apply_mask_to_sequence(x, ids_keep):
     return torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.shape[-1]))
 
 
-def apply_mask_to_alibi(alibi, ids_keep_queries, ids_keep_keys, batch_size, orig_seq_len, masked_seq_len,
-                        attention_heads):
+def apply_mask_to_alibi(
+        alibi,
+        ids_keep_queries,
+        ids_keep_keys,
+        batch_size,
+        orig_seq_len,
+        masked_seq_len,
+        attention_heads
+    ):
     ids_keep_matrix = rearrange(ids_keep_queries, 'b i -> b i 1')\
                       + rearrange(ids_keep_keys, 'b i -> b 1 i') * orig_seq_len
     ids_keep_long_sequence = rearrange(ids_keep_matrix, 'b i j -> b (i j)')
@@ -436,6 +607,46 @@ def apply_mask_to_alibi(alibi, ids_keep_queries, ids_keep_keys, batch_size, orig
     alibi_masked = torch.gather(alibi_long_sequence, dim=1,
                                 index=ids_keep_long_sequence.unsqueeze(-1).repeat(1, 1, attention_heads))
     return rearrange(alibi_masked, 'b (i j) n -> b n i j', i=masked_seq_len, j=masked_seq_len)
+
+def apply_mask_to_alibi_variable_lengths(
+        alibi,
+        ids_keep_queries,
+        ids_keep_keys,
+        batch_size,
+        orig_seq_len_queries,
+        orig_seq_len_keys,
+        masked_seq_len_queries,
+        masked_seq_len_keys,
+        attention_heads
+    ):
+    # Compute the position indices for the kept query-key pairs
+    ids_keep_matrix = rearrange(ids_keep_queries, 'b i -> b i 1') * orig_seq_len_keys \
+                      + rearrange(ids_keep_keys, 'b j -> b 1 j')
+    
+    # Flatten the index matrix to align with the flattened ALiBi tensor
+    ids_keep_long_sequence = rearrange(ids_keep_matrix, 'b i j -> b (i j)')
+    
+    # Prepare the ALiBi tensor for gathering
+    alibi_long_sequence = rearrange(
+        alibi.repeat(batch_size, 1, 1, 1),
+        'b n i j -> b (i j) n'
+    )
+    
+    # Gather the masked ALiBi values using the computed indices
+    alibi_masked = torch.gather(
+        alibi_long_sequence,
+        dim=1,
+        index=ids_keep_long_sequence.unsqueeze(-1).repeat(1, 1, attention_heads)
+    )
+    
+    # Reshape back to the 4D tensor suitable for the attention mechanism
+    return rearrange(
+        alibi_masked,
+        'b (i j) n -> b n i j',
+        i=masked_seq_len_queries,
+        j=masked_seq_len_keys
+    )
+
 
 
 def gather_features(features, world_size):
@@ -454,25 +665,36 @@ class ContrastLossInput(nn.Module):
         super().__init__()
         self.radar_proj = nn.Linear(projection_input, projection_output)
         self.optical_proj = nn.Linear(projection_input, projection_output)
+        self.hires_proj = nn.Linear(projection_input, projection_output) # downscales
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
-    def forward(self, radar_features, optical_features, world_size, rank):
+    def forward(self, radar_features, optical_features, hires_features, world_size, rank):
         # linear projection of unimodal representations
+        print('contrast loss: radar before', radar_features.shape)
         radar_features = self.radar_proj(radar_features)
+        print('contrast loss: radar after ', radar_features.shape)
+        print('contrast loss: lores before', optical_features.shape)
         optical_features = self.optical_proj(optical_features)
+        print('contrast loss: lores after ', optical_features.shape)
+        print('contrast loss: hires before', hires_features.shape)
+        hires_features = self.hires_proj(hires_features)
+        print('contrast loss: hires after ', hires_features.shape)
 
         # L2 normalize
         radar_features = radar_features / radar_features.norm(dim=1, keepdim=True)
         optical_features = optical_features / optical_features.norm(dim=1, keepdim=True)
+        hires_features = hires_features / hires_features.norm(dim=1, keepdim=True)
 
         # gather features from other GPUs
         all_radar_features   = gather_features(features=radar_features,   world_size=world_size)
         all_optical_features = gather_features(features=optical_features, world_size=world_size)
+        all_hires_features   = gather_features(features=hires_features,   world_size=world_size)
 
         # dot product to get logits
         logit_scale = self.logit_scale.exp()
         logits_per_optical = logit_scale * optical_features @ all_radar_features.t()
-        logits_per_radar = logit_scale * radar_features @ all_optical_features.t()
+        logits_per_radar   = logit_scale * radar_features @ all_optical_features.t()
+        logits_per_hires   = logit_scale * hires_features @ all_hires_features.t()
 
         # organize labels
         num_logits = logits_per_optical.shape[0]
@@ -483,10 +705,11 @@ class ContrastLossInput(nn.Module):
         # split loss calculations up for debugging
         loss_optical = F.cross_entropy(logits_per_optical, labels)
         loss_radar   = F.cross_entropy(logits_per_radar, labels)
+        loss_hires   = F.cross_entropy(logits_per_hires, labels)
 
         # calculate loss
         # loss = (F.cross_entropy(logits_per_optical, labels) + F.cross_entropy(logits_per_radar, labels)) / 2
-        loss = (loss_optical + loss_radar) / 2
+        loss = (loss_optical + loss_radar + loss_hires) / 3.0
         return loss
 
 
@@ -585,7 +808,7 @@ class DecoderMAE(nn.Module):
         # pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
         # pred_optical = rearrange(pred[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
         # pred_radar = rearrange(pred[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
-        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
+        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=8, i=16, j=16, h=16, w=16)
         pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
         pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
         
