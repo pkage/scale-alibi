@@ -8,7 +8,7 @@
 #SBATCH --output=/home/s1734411/scale-alibi/logs/salibi_small_stdout.txt
 #SBATCH --error=/home/s1734411/scale-alibi/logs/salibi_small_stderr.txt
 #SBATCH --time=12:00:00
-#SBATCH --job-name=sa-crsmall
+#SBATCH --job-name=sa-small
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
 #SBATCH --chdir=/home/s1734411/scale-alibi/
@@ -45,7 +45,7 @@ salibi hardware
 salibi train \
 	--lores $LSCRATCH/datasets/visual_tiles_small.pmtile \
 	--radar $LSCRATCH/datasets/sar_tiles_small.pmtile \
-	--hires $LSCRATCH/datasets/hires_visual_tiles.pmtile \
+	--hires $LSCRATCH/datasets/hires_visual_tiles_small.pmtile \
 	--ckpts $LSCRATCH/checkpoints/salibi_small \
 	--run-name salibi_small \
 	--learning-rate 1e-4 \
