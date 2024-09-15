@@ -11,7 +11,7 @@ import torch.multiprocessing as mp
 from torch import cuda
 import torch.distributed as dist
 
-from .train import CromaParams, TrainParams, cleanup, croma_train
+from .train import CromaParams, ScaleAlibiParams, TrainParams, cleanup, croma_train, salibi_train
 
 from . import console, pprint
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
@@ -338,7 +338,7 @@ def croma():
 @click.option('-b', '--batch-size', type=int, required=True, help='batch size')
 @click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
-@click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='mask ratio (ratio of patches to keep)')
+@click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
 def cli_croma_train( # rename so it doesn't clash
         lores,
@@ -388,6 +388,81 @@ def cli_croma_train( # rename so it doesn't clash
         (
             world_size,
             croma_params,
+            train_params
+        ),
+        nprocs=world_size,
+        join=True
+    )
+
+    cleanup()
+
+
+# --- salibi ---
+
+@cli.command('train', help='train the full embedder/decoder network')
+@click.option('--lores', type=click.Path(readable=True), required=True, help='low resolution visual path (sentinel-2)')
+@click.option('--radar', type=click.Path(readable=True), required=True, help='SAR path (sentinel-1)')
+@click.option('--hires', type=click.Path(readable=True), required=True, help='high resolution visual (naip tiles)')
+@click.option('--ckpts', type=click.Path(dir_okay=True, file_okay=False), required=True, help='path to write checkpoints to')
+@click.option('--run-name', type=str, required=True, help='run name')
+@click.option('--run-group', type=str, default='croma', help='run group (for wandb)')
+@click.option('-l', '--learning-rate', type=float, required=True, help='learning rate (Adam)')
+@click.option('-e', '--epochs', type=int, required=True, help='epoch count')
+@click.option('-b', '--batch-size', type=int, required=True, help='batch size')
+@click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
+@click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
+@click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
+@click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
+def cli_salibi_train(
+        lores,
+        radar,
+        hires,
+        ckpts,
+        run_name,
+        run_group,
+        learning_rate,
+        epochs,
+        batch_size,
+        device,
+        mask_ratio,
+        nccl_bind,
+        amp
+    ):
+
+    ckpts = Path(ckpts)
+    ckpts.mkdir(exist_ok=True, parents=True)
+
+    salibi_params = ScaleAlibiParams(
+        lores_dataset_path=Path(lores),
+        radar_dataset_path=Path(radar),
+        hires_dataset_path=Path(hires),
+
+        learning_rate=learning_rate,
+        batch_size=batch_size,
+        mask_ratio=mask_ratio,
+        epochs=epochs
+    )
+    train_params = TrainParams(
+        checkpoint_dir=ckpts,
+        run_name=run_name,
+        device=device,
+        amp=amp,
+        nccl_bind=nccl_bind
+    )
+
+
+    console.print('parsed parameters:')
+    pprint(salibi_params)
+
+    world_size = cuda.device_count()
+    console.print(f'using world size of {world_size}')
+
+
+    mp.spawn(
+        salibi_train,
+        (
+            world_size,
+            salibi_params,
             train_params
         ),
         nprocs=world_size,

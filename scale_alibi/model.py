@@ -98,21 +98,21 @@ class ScaleAlibi(nn.Module):
         )
 
         # extension point: implement scale-alibi attention
-        print('generating patches...')
+        # print('generating patches...')
         self.attn_bias = get_scale_alibi(
             attention_heads=self.attention_heads,
             num_patches=self.num_patches
         )
-        print('attn bias', self.attn_bias.shape)
-        print('generating hires patches...')
+        # print('attn bias', self.attn_bias.shape)
+        # print('generating hires patches...')
         self.attn_bias_hires = get_scale_alibi(
             attention_heads=self.attention_heads,
             num_patches=self.num_patches * 4,
             scale_multiplier=0.5
         )
-        print('attn bias hires', self.attn_bias_hires.shape)
-        print('attn bias hires (strided)', self.attn_bias_hires[:,:,:,::4].shape)
-        print('it is done')
+        # print('attn bias hires', self.attn_bias_hires.shape)
+        # print('attn bias hires (strided)', self.attn_bias_hires[:,:,:,::4].shape)
+        # print('it is done')
 
         self.global_contrast_loss = ContrastLossInput(
             projection_input=self.encoder_dim,
@@ -184,9 +184,9 @@ class ScaleAlibi(nn.Module):
             mask_info=hires_mask_info
         )
         
-        print('optical encodings', optical_encodings.shape)
-        print('radar encodings', radar_encodings.shape)
-        print('hires encodings', hires_encodings.shape)
+        # print('optical encodings', optical_encodings.shape)
+        # print('radar encodings', radar_encodings.shape)
+        # print('hires encodings', hires_encodings.shape)
 
         # create unimodal representations with an FFN
         radar_GAP = self.GAP_FFN_radar(
@@ -199,9 +199,9 @@ class ScaleAlibi(nn.Module):
             hires_encodings.mean(dim=1)
         )
         
-        print('optical gap encodings', optical_GAP.shape)
-        print('radar gap encodings', radar_GAP.shape)
-        print('hires gap encodings', hires_GAP.shape)
+        # print('optical gap encodings', optical_GAP.shape)
+        # print('radar gap encodings', radar_GAP.shape)
+        # print('hires gap encodings', hires_GAP.shape)
         
 
 
@@ -213,7 +213,7 @@ class ScaleAlibi(nn.Module):
             world_size=world_size,
             rank=rank
         )
-        print(contrastive_loss)
+        # print(contrastive_loss)
 
         # two step cross attention: first do radar and optical
         # create cross attention bias and create joint multimodal encodings
@@ -227,15 +227,15 @@ class ScaleAlibi(nn.Module):
             attention_heads=self.attention_heads
         )
 
-        print('cross_attn_1_bias', cross_attn_1_bias.shape)
+        # print('cross_attn_1_bias', cross_attn_1_bias.shape)
         joint_encodings_radar_lores = self.cross_encoder(
             x=radar_encodings,
             context=optical_encodings,
             self_alibi=cross_attn_1_bias,
             cross_alibi=cross_attn_1_bias
         )
-        print('joint_encodings_radar_lores', joint_encodings_radar_lores.shape)
-        print('hires_encodings', hires_encodings.shape)
+        # print('joint_encodings_radar_lores', joint_encodings_radar_lores.shape)
+        # print('hires_encodings', hires_encodings.shape)
         
         # step 2 : do radar/lores and optical
         
@@ -311,7 +311,7 @@ class ScaleAlibi(nn.Module):
             self_alibi=cross_attn_1_bias,
             cross_alibi=cross_alibi
         )
-        print('joint_encodings', joint_encodings.shape)
+        # print('joint_encodings', joint_encodings.shape)
 
 
         # reconstruct all sensors
@@ -375,8 +375,8 @@ class Attention(nn.Module):
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.attention_heads), (q, k, v))
         attention_scores = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         if alibi is not None:
-            print('attention_scores', attention_scores.shape)
-            print('alibi', alibi.shape)
+            # print('attention_scores', attention_scores.shape)
+            # print('alibi', alibi.shape)
             attention_scores = attention_scores + alibi
         attn = attention_scores.softmax(dim=-1)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
@@ -690,15 +690,15 @@ class ContrastLossInput(nn.Module):
 
     def forward(self, radar_features, optical_features, hires_features, world_size, rank):
         # linear projection of unimodal representations
-        print('contrast loss: radar before', radar_features.shape)
+        # print('contrast loss: radar before', radar_features.shape)
         radar_features = self.radar_proj(radar_features)
-        print('contrast loss: radar after ', radar_features.shape)
-        print('contrast loss: lores before', optical_features.shape)
+        # print('contrast loss: radar after ', radar_features.shape)
+        # print('contrast loss: lores before', optical_features.shape)
         optical_features = self.optical_proj(optical_features)
-        print('contrast loss: lores after ', optical_features.shape)
-        print('contrast loss: hires before', hires_features.shape)
+        # print('contrast loss: lores after ', optical_features.shape)
+        # print('contrast loss: hires before', hires_features.shape)
         hires_features = self.hires_proj(hires_features)
-        print('contrast loss: hires after ', hires_features.shape)
+        # print('contrast loss: hires after ', hires_features.shape)
 
         # L2 normalize
         radar_features = radar_features / radar_features.norm(dim=1, keepdim=True)
@@ -798,9 +798,9 @@ class DecoderMAE(nn.Module):
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
         pixels_per_patch = int(patch_size * patch_size * total_channels)
         # print(calculated
-        print('total_channels', total_channels)
-        print('patch_size', patch_size)
-        print('pixels_per_patch', pixels_per_patch)
+        # print('total_channels', total_channels)
+        # print('patch_size', patch_size)
+        # print('pixels_per_patch', pixels_per_patch)
         # self.linear_output = nn.Linear(
         #     self.decoder_dim,
         #     pixels_per_patch
@@ -822,13 +822,13 @@ class DecoderMAE(nn.Module):
         x = torch.cat([x, mask_tokens], dim=1)
         x = torch.gather(x, dim=1, index=mask_info_radar['ids_restore'].unsqueeze(-1).repeat(1, 1, x.shape[2]))
         
-        print('pre-decoded x', x.shape)
+        # print('pre-decoded x', x.shape)
 
         # decode embeddings
         x = x + self.decoder_pos_embed
         x = self.linear_output(self.decoder(x))
         
-        print('pred shape', x.shape)
+        # print('pred shape', x.shape)
     
         # split pixel predictions into optical and radar
         # pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
@@ -871,8 +871,8 @@ class DecoderMAE(nn.Module):
         loss_radar = loss_radar.mean(dim=-1)  # [N, L], mean loss per patch
         loss_radar = (loss_radar * mask_info_radar['mask_for_mae']).sum() / mask_info_radar['mask_for_mae'].sum()  # mean loss on removed patches
 
-        print('mask_info_radar.mask_for_mae', mask_info_radar['mask_for_mae'], mask_info_radar['mask_for_mae'].shape)
-        print('mask_info_hires.mask_for_mae', mask_info_hires['mask_for_mae'], mask_info_hires['mask_for_mae'].shape)
+        # print('mask_info_radar.mask_for_mae', mask_info_radar['mask_for_mae'], mask_info_radar['mask_for_mae'].shape)
+        # print('mask_info_hires.mask_for_mae', mask_info_hires['mask_for_mae'], mask_info_hires['mask_for_mae'].shape)
         
         loss_hires = (pred_hires - target_hires) ** 2
         loss_hires = loss_hires.mean(dim=-1)  # [N, L], mean loss per patch

@@ -15,7 +15,7 @@ import wandb
 from . import console
 from .croma.pretrain_croma import CROMA
 from .croma.pretrain_croma import get_mask as get_croma_mask
-from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder
+from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder, MultimodalDataset
 from .model import ScaleAlibi
 from .model import get_mask as get_salibi_mask
 
@@ -369,19 +369,19 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
 
             seq_len = salibi_params.num_patches
             batch_size = batch.radar.shape[0]  # Use the actual batch size
-            radar_mask = get_mask(
+            radar_mask = get_salibi_mask(
                 batch_size,
                 seq_len,
                 device,
                 salibi_params.mask_ratio
             )
-            optical_mask = get_mask(
+            optical_mask = get_salibi_mask(
                 batch_size,
                 seq_len,
                 device,
                 salibi_params.mask_ratio
             )
-            hires_mask = get_mask(
+            hires_mask = get_salibi_mask(
                 batch_size,
                 seq_len * 4,
                 device,
@@ -423,7 +423,7 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
                 total_loss += loss.item()
             else:
                 # no AMP training
-                ccontrastive_loss, mae_loss = model(
+                contrastive_loss, mae_loss = model(
                     radar_imgs,
                     lores_imgs,
                     hires_imgs,
