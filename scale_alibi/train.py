@@ -13,9 +13,11 @@ from torchvision.transforms import Compose
 import wandb
 
 from . import console
-from .croma.pretrain_croma import CROMA, get_mask
-from .dataset.loader import PMTileDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder
-
+from .croma.pretrain_croma import CROMA
+from .croma.pretrain_croma import get_mask as get_croma_mask
+from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder
+from .model import ScaleAlibi
+from .model import get_mask as get_salibi_mask
 
 
 
@@ -35,6 +37,26 @@ class CromaParams:
 
     # probably shouldn't change these
     total_channels: int = 5
+    num_patches: int = 256
+    patch_size: int = 16
+
+
+@dataclass
+class ScaleAlibiParams:
+    # probably need to change these for your hardware
+    lores_dataset_path: Path
+    radar_dataset_path: Path
+    hires_dataset_path: Path
+    batch_size: int = 32
+    
+    # hyperparams, total guess for now
+    # croma_inherited
+    mask_ratio: float = 0.5 # mask ratio (ratio of patches in a sequence to keep)
+    epochs: int = 10
+    learning_rate: float = 1e4
+
+    # probably shouldn't change these
+    total_channels: int = 8
     num_patches: int = 256
     patch_size: int = 16
 
@@ -171,13 +193,13 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
 
             seq_len = croma_params.num_patches
             batch_size = batch.radar.shape[0]  # Use the actual batch size
-            radar_mask = get_mask(
+            radar_mask = get_croma_mask(
                 batch_size,
                 seq_len,
                 device,
                 croma_params.mask_ratio
             )
-            optical_mask = get_mask(
+            optical_mask = get_croma_mask(
                 batch_size,
                 seq_len,
                 device,
@@ -246,4 +268,191 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
         # Save the model checkpoint after each epoch (only rank 0 saves to avoid duplication)
         if rank == 0:
             model_path = train_params.checkpoint_dir / f'croma_checkpoint_{train_params.run_name}_epoch_{epoch}.pth'
+            torch.save(model.state_dict(), model_path)
+
+# --- SCALE ALIBI TRAINING ---
+            
+def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, train_params: TrainParams):
+    # dist setup
+    setup_nccl(
+        rank,
+        world_size,
+        train_params.nccl_bind
+    )
+
+    if rank == 0:
+        wandb_project = os.getenv('WANDB_PROJECT')
+        if wandb_project is None:
+            console.print('[yellow]wandb project is None, this might be a problem!')
+        console.print(f'wandb project: {wandb_project}')
+
+        wandb.init(
+            project=wandb_project,
+            group='scale-alibi',
+
+            config={
+                **asdict(salibi_params),
+                **asdict(train_params)
+            }
+        )
+    # pick the device
+    device = torch.device(f'cuda:{rank}')
+
+
+    # load and create the datasets
+    lores_dset = PMTileDataset(
+        salibi_params.lores_dataset_path,
+        transform=Compose([
+            RemoveChannels([3]), # remove alpha
+            ChannelsFirstImageOrder()
+        ])
+    )
+    radar_dset = PMTileDataset(
+        salibi_params.radar_dataset_path,
+        transform=Compose([
+            RemoveChannels([0, 3]), # remove alpha and empty red channel
+            ChannelsFirstImageOrder()
+        ])
+    )
+    hires_dset = PMTileDataset(
+        salibi_params.hires_dataset_path,
+        transform=Compose([
+            RemoveChannels([3]), # hires may or may not actually bundle an alpha channel
+            ChannelsFirstImageOrder()
+        ])
+    )
+
+    hires_4x_dset = PMTile4xDataset(hires_dset)
+    
+    dataset = MultimodalDataset(
+        radar_dset,
+        lores_dset,
+        hires_dset,
+        hires_4x_dset
+    )
+
+
+    # sampler and loaders
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
+    loader = DataLoader(dataset, batch_size=salibi_params.batch_size, sampler=sampler, num_workers=4, pin_memory=True)
+
+
+    # amp maybe?
+    scaler = None
+    if train_params.amp:
+        scaler = GradScaler()
+
+    # create the model
+    model = ScaleAlibi(
+        # ... defaults should be okay
+        # except for total_channels, we may need to remove channels from S2,
+        total_channels=salibi_params.total_channels, # 2 sar, 3 lores_visual
+        num_patches=salibi_params.num_patches,
+        patch_size=salibi_params.patch_size
+    )
+    model.to(device)
+
+    # optimizer
+    optimizer = Adam(model.parameters(), lr=salibi_params.learning_rate)
+
+    # now we begin!
+    for epoch in range(salibi_params.epochs):
+        console.print(f'beginning epoch {epoch}/{salibi_params.epochs} (rank {rank}/{world_size})')
+        model.train()
+
+        # make sure each process gets different data
+        sampler.set_epoch(epoch)
+
+        total_loss = 0
+        for batch_idx, batch in enumerate(loader):
+            # get the data masks for the MAE
+
+            seq_len = salibi_params.num_patches
+            batch_size = batch.radar.shape[0]  # Use the actual batch size
+            radar_mask = get_mask(
+                batch_size,
+                seq_len,
+                device,
+                salibi_params.mask_ratio
+            )
+            optical_mask = get_mask(
+                batch_size,
+                seq_len,
+                device,
+                salibi_params.mask_ratio
+            )
+            hires_mask = get_mask(
+                batch_size,
+                seq_len * 4,
+                device,
+                salibi_params.mask_ratio
+            )
+
+            radar_imgs = batch.radar.float().to(device)
+            lores_imgs = batch.lores.float().to(device)
+            hires_imgs = batch.hir4x.float().to(device)
+
+            optimizer.zero_grad()
+
+            if train_params.amp:
+                # AMP pass
+                with autocast():
+                    contrastive_loss, mae_loss = model(
+                        radar_imgs,
+                        lores_imgs,
+                        hires_imgs,
+                        radar_mask,
+                        optical_mask,
+                        hires_mask,
+                        rank,
+                        world_size
+                    )
+                    
+                    # TODO: optionally balance the two loss components
+                    loss = contrastive_loss + mae_loss
+                
+                assert scaler is not None # not necessary but keeps my editor from yelling at me
+
+                # AMP backward pass
+                scaler.scale(loss).backward()
+
+                # AMP optimizer step
+                scaler.step(optimizer)
+                scaler.update()
+
+                total_loss += loss.item()
+            else:
+                # no AMP training
+                ccontrastive_loss, mae_loss = model(
+                    radar_imgs,
+                    lores_imgs,
+                    hires_imgs,
+                    radar_mask,
+                    optical_mask,
+                    hires_mask,
+                    rank,
+                    world_size
+                )
+                
+                # TODO: optionally balance the two loss components
+                loss = contrastive_loss + mae_loss
+
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+
+            if rank == 0 and batch_idx % 10 == 0:
+                print(f"Epoch [{epoch+1}/{salibi_params.epochs}], Step [{batch_idx+1}/{len(loader)}], Loss: {loss.item():.4f}")
+                wandb.log({
+                    'epoch': epoch + 1,
+                    'batch_idx': batch_idx + 1,
+                    "train_loss": loss.item(),
+                    "contrastive_loss": contrastive_loss.item(),
+                    "mae_loss": mae_loss.item()
+                })
+
+        # Save the model checkpoint after each epoch (only rank 0 saves to avoid duplication)
+        if rank == 0:
+            model_path = train_params.checkpoint_dir / f'salibi_checkpoint_{train_params.run_name}_epoch_{epoch}.pth'
             torch.save(model.state_dict(), model_path)
