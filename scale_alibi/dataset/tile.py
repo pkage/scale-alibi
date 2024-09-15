@@ -18,6 +18,7 @@ from rio_tiler.errors import TileOutsideBounds
 from rio_tiler.io.rasterio import Reader
 import rasterio
 from supermercado.burntiles import burn
+import httpx
 import numpy as np
 
 from .. import console, track
@@ -839,7 +840,98 @@ def remove_alpha_tiles(
 
     osize = os.path.getsize(outfile)
     console.print(f'Total bundle size: {(osize/(1024*1024)):.2f} MB')
+
     
+def repair_broken_tiles(
+        infile: str,
+        outfile: str,
+        url_template: str
+    ):
+
+    from .download import download_tile
+
+    # using a closure here
+    # and None to indicate no alpha channel, and 
+    def check_tile(tile_bytes: bytes) -> bool | None:
+        img = Image.open(BytesIO(tile_bytes))
+        img = np.array(img)
+
+        if img.shape[-1] != 4:
+            return None
+
+        alpha_channel = img[:,:,3]
+
+        zero_proportion = 1 - (np.count_nonzero(alpha_channel) / alpha_channel.size)
+
+        if zero_proportion > threshold:
+            return False
+
+        return True
+
+
+    tile_list: List[Tuple[int, bytes]] = []
+    with console.status('getting metadata...'):
+        with open(infile, 'rb') as fp:
+            source = MmapSource(fp)
+            reader = PMReader(source)
+            header = reader.header()
+
+            for zxy, t_bytes in all_tiles(source):
+                tileid = zxy_to_tileid(zxy[0], zxy[1], zxy[2])
+                tile_list.append((tileid, t_bytes))
+
+    filtered_tile_list = []
+    retries = 0
+    broken_tiles = set()
+
+    for tileid, t_bytes in track(tile_list, description='retrying tiles...'):
+        while True:
+            try:
+                check_tile(t_bytes)
+                filtered_tile_list.append( (tileid, t_bytes) )
+                break
+            except:
+                z,x,y = tileid_to_zxy(tileid)
+
+                if not tileid in broken_tiles:
+                    broken_tiles.add(tileid)
+                    console.print(f'retrying {z}/{x}/{y}')
+
+                url_formatted = url_template.format(z=z, x=x, y=y)
+                t_bytes = httpx.get( url_formatted ).content
+                retries += 1
+
+
+    console.print(f'redownloaded {len(broken_tiles)} tiles with {retries} retries, ({len(broken_tiles)/len(filtered_tile_list):.2%})')
+
+
+    # console.print(f'filtered out {len(tile_list) - len(filtered_tile_list)} tiles ({(len(tile_list) - len(filtered_tile_list))/len(tile_list):.2%})')
+    # if non_alpha_images != 0:
+    #     console.print(f'[yellow]{non_alpha_images} tiles with no alpha channels were detected ({non_alpha_images / len(tile_list):.2%})')
+    
+
+    # sort by tile_id, just in case
+    filtered_tile_list.sort(key=lambda x: x[0])
+
+
+    with open(outfile, 'wb') as out_f:
+        writer = PMWriter(out_f)
+
+        # ... and then finally write them
+        for tile_id, tile_bytes in track(filtered_tile_list, description='writing tiles..'):
+            writer.write_tile(tile_id, tile_bytes)
+
+
+        with console.status('finalizing bundle...'):
+            writer.finalize(
+                header,
+                {
+                    'attribution': f'repaired'
+                }
+            )
+
+    osize = os.path.getsize(outfile)
+    console.print(f'Total bundle size: {(osize/(1024*1024)):.2f} MB')
 
 if __name__ == '__main__':
     import cProfile

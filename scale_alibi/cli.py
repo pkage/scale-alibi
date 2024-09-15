@@ -20,6 +20,7 @@ from .dataset.tile import (
     convert_to_png_tiles,
     create_downsamples,
     create_zoom_list,
+    repair_broken_tiles,
     get_tile_list,
     merge_tilesets,
     remove_alpha_tiles,
@@ -81,6 +82,7 @@ def download_sar(tiles, output):
 
     with open(output, 'w') as fp:
         fp.write(script)
+
 
 @download.command('visual')
 @click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple', multiple=True)
@@ -319,6 +321,18 @@ def raster_tile_filter(input, output, max_alpha):
         input,
         output,
         threshold=max_alpha
+    )
+
+@raster.command('tile-repair', help='filter out tiles with alpha channels from a tileset')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile broken list', required=True)
+def raster_tile_repair(input, output):
+    console.log(input, output)
+
+    repair_broken_tiles(
+        input,
+        output,
+        'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false',
     )
 
 
