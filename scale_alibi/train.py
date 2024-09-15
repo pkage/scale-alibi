@@ -385,7 +385,8 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
                 batch_size,
                 seq_len * 4,
                 device,
-                salibi_params.mask_ratio
+                salibi_params.mask_ratio,
+                downsize_for_mae=True
             )
 
             radar_imgs = batch.radar.float().to(device)
