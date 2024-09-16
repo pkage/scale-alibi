@@ -30,6 +30,7 @@ pystac-client = "^0.8.3"
 pendulum = "^3.0.0"
 boto3 = "^1.34.149"
 geobench = "^1.0.0"
+scikit-learn = "^1.5.2"
 
 
 [tool.poetry.scripts]
