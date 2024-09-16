@@ -19,6 +19,7 @@ from rio_tiler.io.rasterio import Reader
 import rasterio
 from supermercado.burntiles import burn
 import httpx
+from rich import progress
 import numpy as np
 
 from .. import console, track
@@ -854,19 +855,15 @@ def repair_broken_tiles(
     # and None to indicate no alpha channel, and 
     def check_tile(tile_bytes: bytes) -> bool | None:
         img = Image.open(BytesIO(tile_bytes))
-        img = np.array(img)
-
-        if img.shape[-1] != 4:
-            return None
-
-        alpha_channel = img[:,:,3]
-
-        zero_proportion = 1 - (np.count_nonzero(alpha_channel) / alpha_channel.size)
-
-        if zero_proportion > threshold:
-            return False
-
         return True
+
+
+    empty_img = Image.new('RGB', (256,256))
+    io = BytesIO()
+    empty_img.save(io, format='PNG')
+
+    EMPTY_PNG_BYTES = io.getvalue()
+
 
 
     tile_list: List[Tuple[int, bytes]] = []
@@ -883,26 +880,73 @@ def repair_broken_tiles(
     filtered_tile_list = []
     retries = 0
     broken_tiles = set()
+    missing_tiles = 0
 
-    for tileid, t_bytes in track(tile_list, description='retrying tiles...'):
-        while True:
-            try:
-                check_tile(t_bytes)
-                filtered_tile_list.append( (tileid, t_bytes) )
-                break
-            except:
-                z,x,y = tileid_to_zxy(tileid)
+    with progress.Progress(
+            *progress.Progress.get_default_columns(),
+            progress.TimeElapsedColumn(),
+            progress.MofNCompleteColumn(),
+            console=console
+        ) as pbar:
 
-                if not tileid in broken_tiles:
-                    broken_tiles.add(tileid)
-                    console.print(f'retrying {z}/{x}/{y}')
+        task1 = pbar.add_task("retrying tiles...", total=len(tile_list))
 
-                url_formatted = url_template.format(z=z, x=x, y=y)
-                t_bytes = httpx.get( url_formatted ).content
-                retries += 1
+        for tileid, t_bytes in tile_list:
+            single_retries = 0
+            while True:
+                should_skip = False
+                try:
+                    check_tile(t_bytes)
+                    if not should_skip:
+                        filtered_tile_list.append( (tileid, t_bytes) )
+                    single_retries = 0
+                    break
+                except Exception as e:
+                    # console.print(e)
+                    z,x,y = tileid_to_zxy(tileid)
+
+                    if not tileid in broken_tiles:
+                        broken_tiles.add(tileid)
+                        console.print(f'retrying {z}/{x}/{y}')
+
+                    url_formatted = url_template.format(z=z, x=x, y=y)
+                    try:
+                        # god i wish this would behave itself
+                        if '404' in str(t_bytes):
+                            should_skip = True
+                            raise Exception('404')
+                        if not '503' in str(t_bytes):
+                            # console.print(str(t_bytes))
+                            raise Exception('other error')
+
+                        res = httpx.get( url_formatted )
+                        t_bytes = res.content
+                    except KeyboardInterrupt:
+                        import sys
+                        sys.exit()
+                    except Exception as e:
+                        console.print(f'[red]{e}, skipping')
+                        t_bytes = EMPTY_PNG_BYTES
+                        missing_tiles += 1
+
+
+                    retries += 1
+                    # print(res.status_code)
+                    if single_retries > 0: #give up immediately
+                        console.print(f'[red]giving up after {single_retries} attempts.')
+                        t_bytes = EMPTY_PNG_BYTES
+                        missing_tiles += 1
+                    else:
+                        single_retries += 1
+            pbar.update(task1, advance=1)
 
 
     console.print(f'redownloaded {len(broken_tiles)} tiles with {retries} retries, ({len(broken_tiles)/len(filtered_tile_list):.2%})')
+    try: # this is 100% unnecessary here, TODO remove
+        if len(broken_tiles) != 0:
+            console.print(f'{missing_tiles} missing tiles ({missing_tiles/len(broken_tiles):.2%}, {missing_tiles/len(filtered_tile_list):.2%} overall)')
+    except:
+        ...
 
 
     # console.print(f'filtered out {len(tile_list) - len(filtered_tile_list)} tiles ({(len(tile_list) - len(filtered_tile_list))/len(tile_list):.2%})')
