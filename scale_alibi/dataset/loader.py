@@ -252,10 +252,28 @@ class PMTile4xDataset(PMTileDataset):
         # top-left, top-right, bottom-right, bottom-left
         top_left, top_right, bottom_right, bottom_left = get_children_tile_ids(tile_id)
 
+        def ensure_alpha_channel(arr):
+            if arr.shape[-1] == 4:
+                return arr
+            return np.stack(
+                [
+                    arr[:,:,0],
+                    arr[:,:,1],
+                    arr[:,:,2],
+                    np.ones_like(arr[:,:,0]) * 255
+                ],
+                axis=-1
+            )
+
         top_left     = self.get_by_tile_id_raw( top_left )
         top_right    = self.get_by_tile_id_raw( top_right )
         bottom_right = self.get_by_tile_id_raw( bottom_right )
         bottom_left  = self.get_by_tile_id_raw( bottom_left )
+
+        top_left     = ensure_alpha_channel( top_left )
+        top_right    = ensure_alpha_channel( top_right )
+        bottom_right = ensure_alpha_channel( bottom_right )
+        bottom_left  = ensure_alpha_channel( bottom_left )
 
         # load the bytes of the images
         top_row, _ = einops.pack(
