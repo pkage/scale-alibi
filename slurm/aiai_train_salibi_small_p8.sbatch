@@ -50,7 +50,7 @@ salibi train \
 	--run-name salibi_small_p8 \
 	--learning-rate 1e-4 \
 	--epochs 50 \
-	--batch-size 16 \
+	--batch-size 8 \
 	--mask-ratio 0.4 \
 	--device cuda \
     --patch-size 8 \
