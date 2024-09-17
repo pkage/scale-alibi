@@ -66,7 +66,8 @@ def download():
 @download.command('sar')
 @click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multiple', multiple=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
-def download_sar(tiles, output):
+@click.option('-l', '--tile-level', type=int, help='generate tiles at this level', default=15)
+def download_sar(tiles, output, tile_level):
     all_images = []
     for tile in tiles:
         tile = parse_tile(tile)
@@ -78,7 +79,7 @@ def download_sar(tiles, output):
 
         all_images += images
 
-    script = create_sar_script(all_images)
+    script = create_sar_script(all_images, tile_level)
 
     with open(output, 'w') as fp:
         fp.write(script)
@@ -87,7 +88,8 @@ def download_sar(tiles, output):
 @download.command('visual')
 @click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple', multiple=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
-def download_visual(tiles, output):
+@click.option('-l', '--tile-level', type=int, help='generate tiles at this level', default=15)
+def download_visual(tiles, output, tile_level):
     all_images = []
     for tile in tiles:
         tile = parse_tile(tile)
@@ -99,7 +101,7 @@ def download_visual(tiles, output):
 
         all_images += images
 
-    script = create_visual_script(all_images)
+    script = create_visual_script(all_images, tile_level)
 
     with open(output, 'w') as fp:
         fp.write(script)
@@ -425,6 +427,8 @@ def cli_croma_train( # rename so it doesn't clash
 @click.option('-b', '--batch-size', type=int, required=True, help='batch size')
 @click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
+@click.option('--patch-size', type=int, default=16, help='side length of patches to make')
+@click.option('--patch-count', type=int, default=256, help='number of patches to target')
 @click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
 def cli_salibi_train(
@@ -439,6 +443,8 @@ def cli_salibi_train(
         batch_size,
         device,
         mask_ratio,
+        patch_size,
+        patch_count,
         nccl_bind,
         amp
     ):
@@ -454,7 +460,10 @@ def cli_salibi_train(
         learning_rate=learning_rate,
         batch_size=batch_size,
         mask_ratio=mask_ratio,
-        epochs=epochs
+        epochs=epochs,
+
+        patch_size=patch_size,
+        num_patches=patch_count
     )
     train_params = TrainParams(
         checkpoint_dir=ckpts,

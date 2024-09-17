@@ -124,7 +124,7 @@ def get_visual_images(tile: mercantile.Tile, time_start: DateTime, weeks: int = 
     return coverage_filter
 
 
-def create_sar_script(items: List[Item]):
+def create_sar_script(items: List[Item], tile_level: int):
     def create_download_process_script(item: Item):
         item_name = item.id
         vv_filename = f'{item_name}-vv.tif'
@@ -150,7 +150,7 @@ def create_sar_script(items: List[Item]):
 
         process_item = dedent(f'''\
             if ! [ -f ./tiles/{tile_filename} ]; then
-                salibi raster tile-sar -vv ./rasters/{vv_filename} -vh ./rasters/{vh_filename} -o ./tiles/{tile_filename} -l 15
+                salibi raster tile-sar -vv ./rasters/{vv_filename} -vh ./rasters/{vh_filename} -o ./tiles/{tile_filename} -l {tile_level}
             else
                 echo "{tile_filename} has been generated already"
             fi
@@ -210,7 +210,7 @@ def create_sar_script(items: List[Item]):
 
     script +=  dedent(f'''\
         if ! [ -f ./{downsample_tile_name} ]; then
-            salibi raster downsample -i ./{merged_tile_name} -o ./{downsample_tile_name} -l 15
+            salibi raster downsample -i ./{merged_tile_name} -o ./{downsample_tile_name} -l {tile_level}
         else
             echo "downsampled tileset {downsample_tile_name} has been generated already"
         fi
@@ -220,7 +220,7 @@ def create_sar_script(items: List[Item]):
     return script
 
 
-def create_visual_script(items: List[Item]):
+def create_visual_script(items: List[Item], tile_level: int):
     def create_download_process_script(item: Item):
         item_name = item.id
         visual_filename = f'{item_name}-visual.tif'
@@ -238,7 +238,7 @@ def create_visual_script(items: List[Item]):
 
         process_item = dedent(f'''\
             if ! [ -f ./tiles/{tile_filename} ]; then
-                salibi raster tile-visual -i ./rasters/{visual_filename}  -o ./tiles/{tile_filename} -l 15
+                salibi raster tile-visual -i ./rasters/{visual_filename}  -o ./tiles/{tile_filename} -l {tile_level}
             else
                 echo "{tile_filename} has been generated already"
             fi
@@ -298,7 +298,7 @@ def create_visual_script(items: List[Item]):
 
     script +=  dedent(f'''\
         if ! [ -f ./{downsample_tile_name} ]; then
-            salibi raster downsample -i ./{merged_tile_name} -o ./{downsample_tile_name} -l 15
+            salibi raster downsample -i ./{merged_tile_name} -o ./{downsample_tile_name} -l {tile_level}
         else
             echo "downsampled tileset {downsample_tile_name} has been generated already"
         fi
