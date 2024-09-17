@@ -346,7 +346,7 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
     model = ScaleAlibi(
         # ... defaults should be okay
         # except for total_channels, we may need to remove channels from S2,
-        total_channels=salibi_params.total_channels, # 2 sar, 3 lores_visual
+        total_channels=salibi_params.total_channels, # 2 sar, 3 lores_visual, 3 hires_visual
         num_patches=salibi_params.num_patches,
         patch_size=salibi_params.patch_size
     )

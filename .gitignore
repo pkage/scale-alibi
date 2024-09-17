@@ -1,8 +1,11 @@
 ### project
 
+notebooks/projection_cache/
+rasters
 dataset
 dataset/
 logs/
+checkpoints
 checkpoints/
 scale_alibi/dataset/download.py
 viewer/public/rasters/

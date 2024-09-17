@@ -1,5 +1,10 @@
 # based heavily on the implementation here: https://github.com/antofuller/CROMA/blob/main/pretrain_croma.py
-# this is mostly in the 
+# changes:
+#  - added scale alibi attention
+#  - vastly faster attention implementation
+#  - hires (4x) support
+#     - third image encoder -> 4x token count
+#     - scale-alibi attention
 
 import torch
 import numpy as np
@@ -11,6 +16,8 @@ from torch import nn, einsum
 from einops import rearrange, pack
 from PIL import Image
 
+from .util import Modality
+from typing import List, Tuple
 
 class ScaleAlibi(nn.Module):
     def __init__(
@@ -335,8 +342,85 @@ class ScaleAlibi(nn.Module):
         )
 
         return contrastive_loss, mae_loss
+    
+    def resize_attentions(
+        self,
+        image_resolution: int,
+        scale_multiplier: float
+    ):
+        num_patches = int((image_resolution/16)**2)
+        if self.num_patches == num_patches:
+            return
+        
+        self.num_patches = num_patches
+        self.attn_bias = get_scale_alibi(
+            attention_heads=self.attention_heads,
+            num_patches=self.num_patches,
+            scale_multiplier=scale_multiplier
+        )
+        self.attn_bias_hires = get_scale_alibi(
+            attention_heads=self.attention_heads,
+            num_patches=self.num_patches * 4,
+            scale_multiplier=0.5*scale_multiplier
+        )
+        
+        
 
-
+    def project(
+            self,
+            images: torch.Tensor,
+            modality: Modality,
+            scale_multiplier=1.0
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # check to see if we have been passed a single image, if so
+        # we make it into a batch size of 1
+        if len(images.shape) == 3:
+            images = rearrange(images, 'c h w -> 1 c h w')
+    
+#         image_resolution = images.shape[-1]
+#         self.resize_attentions(image_resolution, scale_multiplier)
+    
+        # let us begin
+        if self.attn_bias.device != images.device:
+            self.attn_bias = self.attn_bias.to(images.device)
+        if self.attn_bias_hires.device != images.device:
+            self.attn_bias_hires = self.attn_bias_hires.to(images.device)
+            
+        # encode each sensor independently
+        # encodings = None
+        if modality == Modality.SAR:
+            encodings = self.radar_encoder(
+                imgs=images,
+                attn_bias=self.attn_bias
+            )
+            
+            projected = self.GAP_FFN_radar(
+                encodings.mean(dim=1)
+            )
+        elif modality == Modality.OPTICAL_LOW_RES:
+            encodings = self.optical_encoder(
+                imgs=images,
+                attn_bias=self.attn_bias
+            )
+            
+            projected = self.GAP_FFN_optical(
+                encodings.mean(dim=1)
+            )
+        elif modality == Modality.OPTICAL_HIGH_RES:
+            encodings = self.hires_encoder(
+                imgs=images,
+                attn_bias=self.attn_bias_hires
+            )
+            
+            projected = self.GAP_FFN_optical(
+                encodings.mean(dim=1)
+            )
+        else:
+            raise ValueError(f'unsupported modality: {modality}')
+        
+        return encodings, projected
+        
+        
 class FFN(nn.Module):
     def __init__(self,
                  dim,

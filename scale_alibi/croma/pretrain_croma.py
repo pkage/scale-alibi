@@ -1,5 +1,5 @@
 # original file: https://github.com/antofuller/CROMA/blob/main/pretrain_croma.py
-# modified to increase patch size and work on 256x256 images
+# modified to increase patch size and work on 256x256 images, as well as roll in projection
 
 import torch
 import numpy as np
@@ -10,6 +10,9 @@ from torch import distributed as dist
 from torch import nn, einsum
 from einops import rearrange, pack
 from PIL import Image
+
+from ..util import Modality
+from typing import List, Tuple
 
 class CROMA(nn.Module):
     def __init__(
@@ -181,6 +184,63 @@ class CROMA(nn.Module):
         )
 
         return contrastive_loss, mae_loss
+    
+    def resize_attentions(
+        self,
+        image_resolution: int
+    ):
+        num_patches = int((image_resolution/16)**2)
+        if self.num_patches == num_patches:
+            return
+        
+        self.num_patches = num_patches
+        self.attn_bias = get_alibi(
+            attention_heads=self.attention_heads,
+            num_patches=self.num_patches,
+            # scale_multiplier=0.5
+        )
+    
+    def project(
+        self,
+        images: torch.Tensor,
+        modality: Modality
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # check to see if we have been passed a single image, if so
+        # we make it into a batch size of 1
+        if len(images.shape) == 3:
+            images = rearrange(images, 'c h w -> 1 c h w')
+    
+#         image_resolution = images.shape[-1]
+#         self.resize_attentions(image_resolution)
+    
+        # let us begin
+        if self.attn_bias.device != images.device:
+            self.attn_bias = self.attn_bias.to(images.device)
+        
+        # encode each sensor independently
+        # encodings = None
+        if modality == Modality.SAR:
+            encodings = self.radar_encoder(
+                imgs=images,
+                attn_bias=self.attn_bias
+            )
+            
+            projected = self.GAP_FFN_radar(
+                encodings.mean(dim=1)
+            )
+        elif modality == Modality.OPTICAL_LOW_RES:
+            encodings = self.optical_encoder(
+                imgs=images,
+                attn_bias=self.attn_bias
+            )
+            
+            projected = self.GAP_FFN_optical(
+                encodings.mean(dim=1)
+            )
+        else:
+            raise ValueError(f'unsupported modality: {modality}')
+        
+        return encodings, projected
 
 
 class FFN(nn.Module):

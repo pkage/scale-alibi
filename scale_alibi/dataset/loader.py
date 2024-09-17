@@ -445,93 +445,93 @@ class ChannelsFirstImageOrder:
         return einops.rearrange(image, 'h w c -> c h w')
 
 
-class RandomFlip:
-    '''Randomly flips the sample/labels horizontally and/or vertically'''
+# class RandomFlip:
+#     '''Randomly flips the sample/labels horizontally and/or vertically'''
 
-    def __call__(self, sample_pair):
-        sample = sample_pair['sample']
-        label = sample_pair['label']
+#     def __call__(self, sample_pair):
+#         sample = sample_pair['sample']
+#         label = sample_pair['label']
 
-        flip_h, flip_v = torch.randint(0,2,(2,))
+#         flip_h, flip_v = torch.randint(0,2,(2,))
 
-        if bool(flip_h):
-            sample = np.flip(sample, axis=0)
-            label  = np.flip(label,  axis=0)
+#         if bool(flip_h):
+#             sample = np.flip(sample, axis=0)
+#             label  = np.flip(label,  axis=0)
 
-        if bool(flip_v):
-            sample = np.flip(sample, axis=1)
-            label  = np.flip(label,  axis=1)
+#         if bool(flip_v):
+#             sample = np.flip(sample, axis=1)
+#             label  = np.flip(label,  axis=1)
 
-        # remove negative strides
-        if bool(flip_v) or bool(flip_h):
-            sample = sample.copy()
-            label = label.copy()
+#         # remove negative strides
+#         if bool(flip_v) or bool(flip_h):
+#             sample = sample.copy()
+#             label = label.copy()
 
-        return {
-            'sample': sample,
-            'label':  label
-        }
+#         return {
+#             'sample': sample,
+#             'label':  label
+#         }
 
 
 
-class RescaleImageData:
-    '''Rescale ImageData to be between 0-1'''
+# class RescaleImageData:
+#     '''Rescale ImageData to be between 0-1'''
 
-    def __init__(self, data_min=None, data_max=None):
-        self.data_min = data_min
-        self.data_max = data_max
+#     def __init__(self, data_min=None, data_max=None):
+#         self.data_min = data_min
+#         self.data_max = data_max
 
-    def __call__(self, image_data: ImageData):
-        if type(image_data) is not ImageData:
-            console.log(f'[red]{image_data} is not ImageData, this will probably break')
+#     def __call__(self, image_data: ImageData):
+#         if type(image_data) is not ImageData:
+#             console.log(f'[red]{image_data} is not ImageData, this will probably break')
 
-        stats = image_data.statistics(categorical=True)['b1']
+#         stats = image_data.statistics(categorical=True)['b1']
         
-        if self.data_min is None:
-            data_min = stats.min
-        else:
-            data_min = self.data_min
+#         if self.data_min is None:
+#             data_min = stats.min
+#         else:
+#             data_min = self.data_min
 
-        if self.data_max is None:
-            data_max = stats.max
-        else:
-            data_max = self.data_max
+#         if self.data_max is None:
+#             data_max = stats.max
+#         else:
+#             data_max = self.data_max
 
-        image_data.rescale(in_range=((data_min, data_max),),)
+#         image_data.rescale(in_range=((data_min, data_max),),)
 
-        return image_data
-
-
-class ImageDataToNumpy:
-    '''Convert ImageData to numpy, in (row, col, band) order'''
-
-    def __call__(self, img: ImageData):
-        if type(img) is not ImageData:
-            console.log(f'[red]{img} is not ImageData, this will probably break')
-
-        return img.data_as_image()
+#         return image_data
 
 
-class ToTensor:
-    '''Convert ndarrays in sample pair to Tensors.'''
+# class ImageDataToNumpy:
+#     '''Convert ImageData to numpy, in (row, col, band) order'''
 
-    def __call__(self, sample_pair):
-        sample = sample_pair['sample']
-        label = sample_pair['label']
+#     def __call__(self, img: ImageData):
+#         if type(img) is not ImageData:
+#             console.log(f'[red]{img} is not ImageData, this will probably break')
+
+#         return img.data_as_image()
 
 
-        # swap color axis because
-        # numpy image: H x W x C
-        # torch image: C x H x W
-        sample = sample.transpose((2, 0, 1))
-        label  = label.transpose((2, 0, 1))
-        label = label[0,:,:]
+# class ToTensor:
+#     '''Convert ndarrays in sample pair to Tensors.'''
 
-        # clamp to 1.0
-        label[label > 1.0] = 1.0
+#     def __call__(self, sample_pair):
+#         sample = sample_pair['sample']
+#         label = sample_pair['label']
 
-        return {
-            'sample': torch.from_numpy(sample),
-            'label':  torch.from_numpy(label)
-        }
+
+#         # swap color axis because
+#         # numpy image: H x W x C
+#         # torch image: C x H x W
+#         sample = sample.transpose((2, 0, 1))
+#         label  = label.transpose((2, 0, 1))
+#         label = label[0,:,:]
+
+#         # clamp to 1.0
+#         label[label > 1.0] = 1.0
+
+#         return {
+#             'sample': torch.from_numpy(sample),
+#             'label':  torch.from_numpy(label)
+#         }
 
