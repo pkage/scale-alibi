@@ -54,6 +54,7 @@ salibi train \
 	--mask-ratio 0.4 \
 	--device cuda \
     --patch-size 8 \
-    --patch-count 1024
+    --patch-count 1024 \
+    --amp
 
 
