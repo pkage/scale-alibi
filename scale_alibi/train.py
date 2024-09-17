@@ -15,7 +15,7 @@ import wandb
 from . import console
 from .croma.pretrain_croma import CROMA
 from .croma.pretrain_croma import get_mask as get_croma_mask
-from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder, MultimodalDataset
+from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder, MultimodalDataset, HalfResolution
 from .model import ScaleAlibi
 from .model import get_mask as get_salibi_mask
 
@@ -59,6 +59,7 @@ class ScaleAlibiParams:
     total_channels: int = 8
     num_patches: int = 256
     patch_size: int = 16
+    half_resolution: bool = False
 
 
 @dataclass
@@ -300,27 +301,54 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
 
 
     # load and create the datasets
-    lores_dset = PMTileDataset(
-        salibi_params.lores_dataset_path,
-        transform=Compose([
-            RemoveChannels([3]), # remove alpha
-            ChannelsFirstImageOrder()
-        ])
-    )
-    radar_dset = PMTileDataset(
-        salibi_params.radar_dataset_path,
-        transform=Compose([
-            RemoveChannels([0, 3]), # remove alpha and empty red channel
-            ChannelsFirstImageOrder()
-        ])
-    )
-    hires_dset = PMTileDataset(
-        salibi_params.hires_dataset_path,
-        transform=Compose([
-            RemoveChannels([3]), # hires may or may not actually bundle an alpha channel
-            ChannelsFirstImageOrder()
-        ])
-    )
+    if salibi_params.half_resolution:
+        lores_dset = PMTileDataset(
+            salibi_params.lores_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # remove alpha
+                HalfResolution(),
+                ChannelsFirstImageOrder()
+            ])
+        )
+        radar_dset = PMTileDataset(
+            salibi_params.radar_dataset_path,
+            transform=Compose([
+                RemoveChannels([0, 3]), # remove alpha and empty red channel
+                HalfResolution(),
+                ChannelsFirstImageOrder()
+            ])
+        )
+        hires_dset = PMTileDataset(
+            salibi_params.hires_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # hires may or may not actually bundle an alpha channel
+                HalfResolution(),
+                ChannelsFirstImageOrder()
+            ])
+        )
+    else:
+        lores_dset = PMTileDataset(
+            salibi_params.lores_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # remove alpha
+                ChannelsFirstImageOrder()
+            ])
+        )
+        radar_dset = PMTileDataset(
+            salibi_params.radar_dataset_path,
+            transform=Compose([
+                RemoveChannels([0, 3]), # remove alpha and empty red channel
+                ChannelsFirstImageOrder()
+            ])
+        )
+        hires_dset = PMTileDataset(
+            salibi_params.hires_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # hires may or may not actually bundle an alpha channel
+                ChannelsFirstImageOrder()
+            ])
+        )
+
 
     hires_4x_dset = PMTile4xDataset(hires_dset)
     

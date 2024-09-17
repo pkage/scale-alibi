@@ -431,6 +431,7 @@ def cli_croma_train( # rename so it doesn't clash
 @click.option('--patch-count', type=int, default=256, help='number of patches to target')
 @click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
+@click.option('--half-resolution', type=bool, is_flag=True, help='train at half resolution to conserve vram')
 def cli_salibi_train(
         lores,
         radar,
@@ -446,7 +447,8 @@ def cli_salibi_train(
         patch_size,
         patch_count,
         nccl_bind,
-        amp
+        amp,
+        half_resolution
     ):
 
     ckpts = Path(ckpts)
@@ -463,7 +465,8 @@ def cli_salibi_train(
         epochs=epochs,
 
         patch_size=patch_size,
-        num_patches=patch_count
+        num_patches=patch_count,
+        half_resolution=half_resolution
     )
     train_params = TrainParams(
         checkpoint_dir=ckpts,

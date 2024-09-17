@@ -443,6 +443,10 @@ class RemoveChannels:
 class ChannelsFirstImageOrder:
     def __call__(self, image: np.ndarray):
         return einops.rearrange(image, 'h w c -> c h w')
+    
+class HalfResolution:
+    def __call__(self, image: np.ndarray):
+        return image[::2,::2,:]
 
 
 # class RandomFlip:
