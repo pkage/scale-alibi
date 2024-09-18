@@ -46,8 +46,8 @@ salibi train \
 	--lores $LSCRATCH/datasets/visual_tiles_small.pmtile \
 	--radar $LSCRATCH/datasets/sar_tiles_small.pmtile \
 	--hires $LSCRATCH/datasets/hires_visual_tiles_small.pmtile \
-	--ckpts $LSCRATCH/checkpoints/salibi_small_p8 \
-	--run-name salibi_small_p8 \
+	--ckpts $LSCRATCH/checkpoints/salibi_small_p8_l5 \
+	--run-name salibi_small_p8_l5 \
 	--learning-rate 1e-5 \
 	--epochs 50 \
 	--batch-size 24 \

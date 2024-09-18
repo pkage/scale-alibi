@@ -45,8 +45,8 @@ salibi hardware
 salibi croma train \
 	--lores $LSCRATCH/datasets/visual_tiles_small.pmtile \
 	--radar $LSCRATCH/datasets/sar_tiles_small.pmtile \
-	--ckpts $LSCRATCH/checkpoints/croma_small \
-	--run-name croma_small \
+	--ckpts $LSCRATCH/checkpoints/croma_small_p8 \
+	--run-name croma_small_p8 \
 	--learning-rate 1e-4 \
 	--epochs 50 \
 	--batch-size 32 \
