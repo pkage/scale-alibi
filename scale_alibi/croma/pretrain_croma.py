@@ -11,6 +11,7 @@ from torch import nn, einsum
 from einops import rearrange, pack
 from PIL import Image
 
+from ..model import get_scale_alibi
 from ..util import Modality
 from typing import List, Tuple
 
@@ -409,30 +410,40 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     return emb
 
 
+# def get_alibi(attention_heads, num_patches):
+#     points = list(itertools.product(range(int(math.sqrt(num_patches))), range(int(math.sqrt(num_patches)))))
+
+#     def get_slopes(n):
+#         def get_slopes_power_of_2(n):
+#             start = (2 ** (-2 ** -(math.log2(n) - 3)))
+#             ratio = start
+#             return [start * ratio ** i for i in range(n)]
+
+#         if math.log2(n).is_integer():
+#             return get_slopes_power_of_2(n)
+#         else:
+#             closest_power_of_2 = 2 ** math.floor(math.log2(n))
+#             return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
+#                                                                :n - closest_power_of_2]
+
+#     slopes = torch.Tensor(get_slopes(attention_heads)).unsqueeze(1)
+#     idxs = []
+#     for p1 in points:
+#         for p2 in points:
+#             dist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+#             idxs.append(dist * slopes * -1)
+#     all_bias = torch.cat(idxs, dim=1)
+#     return all_bias.view(1, attention_heads, num_patches, num_patches)
+
 def get_alibi(attention_heads, num_patches):
-    points = list(itertools.product(range(int(math.sqrt(num_patches))), range(int(math.sqrt(num_patches)))))
-
-    def get_slopes(n):
-        def get_slopes_power_of_2(n):
-            start = (2 ** (-2 ** -(math.log2(n) - 3)))
-            ratio = start
-            return [start * ratio ** i for i in range(n)]
-
-        if math.log2(n).is_integer():
-            return get_slopes_power_of_2(n)
-        else:
-            closest_power_of_2 = 2 ** math.floor(math.log2(n))
-            return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
-                                                               :n - closest_power_of_2]
-
-    slopes = torch.Tensor(get_slopes(attention_heads)).unsqueeze(1)
-    idxs = []
-    for p1 in points:
-        for p2 in points:
-            dist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
-            idxs.append(dist * slopes * -1)
-    all_bias = torch.cat(idxs, dim=1)
-    return all_bias.view(1, attention_heads, num_patches, num_patches)
+    # at a 1.0 scale, this is identical to the original croma attention
+    # just vastly faster... the above function would take 
+    # minutes at high patch counts as it's wildly inefficient
+    return get_scale_alibi(
+        attention_heads,
+        num_patches,
+        scale_multiplier=1.0
+    )
 
 
 def get_mask(bsz, seq_len, device, mask_ratio):
@@ -610,14 +621,16 @@ class DecoderMAE(nn.Module):
         # decode embeddings
         x = x + self.decoder_pos_embed
         x = self.linear_output(self.decoder(x))
+        
+        patch_square_shape = int(math.sqrt(self.num_patches))
     
         # split pixel predictions into optical and radar
         # pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
         # pred_optical = rearrange(pred[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
         # pred_radar = rearrange(pred[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
-        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
-        pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
-        pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        pred = rearrange(x, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=self.patch_size, j=self.patch_size, h=patch_square_shape, w=patch_square_shape)
+        pred_optical = rearrange(pred[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=self.patch_size, j=self.patch_size)
+        pred_radar = rearrange(pred[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=self.patch_size, j=self.patch_size)
         
         # print('x', x.shape)
         # print('pred', pred.shape)
@@ -636,9 +649,9 @@ class DecoderMAE(nn.Module):
         # target_optical = rearrange(target[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
         # target_radar = rearrange(target[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
         
-        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=16, j=16, h=16, w=16)
-        target_optical = rearrange(target[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=16, j=16)
-        target_radar = rearrange(target[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=16, j=16)
+        target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=5, i=self.patch_size, j=self.patch_size, h=patch_square_shape, w=patch_square_shape)
+        target_optical = rearrange(target[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=self.patch_size, j=self.patch_size)
+        target_radar = rearrange(target[:, 3:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=self.patch_size, j=self.patch_size)
 
         # calculate optical reconstruction loss
         loss_optical = (pred_optical - target_optical) ** 2
