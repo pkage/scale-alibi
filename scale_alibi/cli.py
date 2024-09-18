@@ -356,6 +356,7 @@ def croma():
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
 @click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
+@click.option('--half-resolution', type=bool, is_flag=True, help='train at half resolution to conserve vram')
 def cli_croma_train( # rename so it doesn't clash
         lores,
         radar,
@@ -368,7 +369,8 @@ def cli_croma_train( # rename so it doesn't clash
         device,
         mask_ratio,
         nccl_bind,
-        amp
+        amp,
+        half_resolution
     ):
 
     ckpts = Path(ckpts)
@@ -381,7 +383,8 @@ def cli_croma_train( # rename so it doesn't clash
         learning_rate=learning_rate,
         batch_size=batch_size,
         mask_ratio=mask_ratio,
-        epochs=epochs
+        epochs=epochs,
+        half_resolution=half_resolution
     )
     train_params = TrainParams(
         checkpoint_dir=ckpts,
