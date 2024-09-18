@@ -40,6 +40,8 @@ class CromaParams:
     num_patches: int = 256
     patch_size: int = 16
 
+    half_resolution: bool = False
+
 
 @dataclass
 class ScaleAlibiParams:
@@ -135,22 +137,38 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
     # pick the device
     device = torch.device(f'cuda:{rank}')
 
-
-    # load and create the datasets
-    lores_dset = PMTileDataset(
-        croma_params.lores_dataset_path,
-        transform=Compose([
-            RemoveChannels([3]), # remove alpha
-            ChannelsFirstImageOrder()
-        ])
-    )
-    radar_dset = PMTileDataset(
-        croma_params.radar_dataset_path,
-        transform=Compose([
-            RemoveChannels([0, 3]), # remove alpha and empty red channel
-            ChannelsFirstImageOrder()
-        ])
-    )
+    if croma_params.half_resolution:
+        lores_dset = PMTileDataset(
+            croma_params.lores_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # remove alpha
+                HalfResolution(),
+                ChannelsFirstImageOrder()
+            ])
+        )
+        radar_dset = PMTileDataset(
+            croma_params.radar_dataset_path,
+            transform=Compose([
+                RemoveChannels([0, 3]), # remove alpha and empty red channel
+                HalfResolution(),
+                ChannelsFirstImageOrder()
+            ])
+        )
+    else:
+        lores_dset = PMTileDataset(
+            croma_params.lores_dataset_path,
+            transform=Compose([
+                RemoveChannels([3]), # remove alpha
+                ChannelsFirstImageOrder()
+            ])
+        )
+        radar_dset = PMTileDataset(
+            croma_params.radar_dataset_path,
+            transform=Compose([
+                RemoveChannels([0, 3]), # remove alpha and empty red channel
+                ChannelsFirstImageOrder()
+            ])
+        )
 
     dataset = LoresMultimodalDataset(
         radar_dset,
