@@ -325,9 +325,9 @@ def raster_tile_filter(input, output, max_alpha):
         threshold=max_alpha
     )
 
-@raster.command('tile-repair', help='filter out tiles with alpha channels from a tileset')
+@raster.command('tile-repair', help='redownload missing tiles in a dataset')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
-@click.option('-o', '--output', type=click.Path(writable=True), help='output tile broken list', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
 def raster_tile_repair(input, output):
     console.log(input, output)
 
