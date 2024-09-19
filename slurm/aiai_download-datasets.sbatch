@@ -78,3 +78,26 @@ else
     echo "hires_visual_tiles.pmtile has already been downloaded."
 fi
 
+# micro ones
+
+if ! [ -f $LSCRATCH/visual_tiles_micro.pmtile ]; then
+    echo "visual_tiles_micro.pmtile not found, downloading..."
+    curl -L https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/visual_tiles_micro.pmtile -o $LSCRATCH/visual_tiles_micro.pmtile
+else
+    echo "visual_tiles_micro.pmtile has already been downloaded."
+fi
+
+if ! [ -f $LSCRATCH/sar_tiles_micro.pmtile ]; then
+    echo "sar_tiles_micro.pmtile not found, downloading..."
+    curl -L https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/sar_tiles_micro.pmtile -o $LSCRATCH/sar_tiles_micro.pmtile
+else
+    echo "sar_tiles_micro.pmtile has already been downloaded."
+fi
+
+if ! [ -f $LSCRATCH/hires_visual_tiles_micro.pmtile ]; then
+    echo "hires_visual_tiles_micro.pmtile not found, downloading..."
+    curl -L https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/hires_visual_tiles_micro.pmtile -o $LSCRATCH/hires_visual_tiles_micro.pmtile
+else
+    echo "hires_visual_tiles_micro.pmtile has already been downloaded."
+fi
+
