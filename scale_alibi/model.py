@@ -946,7 +946,7 @@ class DecoderMAE(nn.Module):
         # target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=14, i=8, j=8, h=15, w=15)
         # target_optical = rearrange(target[:, :12, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=12, i=8, j=8)
         # target_radar = rearrange(target[:, 12:, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=8, j=8)
-        print('target', target.shape)
+        # print('target', target.shape)
         target = rearrange(target, 'b (h w) (c i j) -> b c (h i) (w j)', c=8, i=self.patch_size, j=self.patch_size, h=patch_square_shape, w=patch_square_shape)
         target_optical = rearrange(target[:, :3, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=3, i=self.patch_size, j=self.patch_size)
         target_radar = rearrange(target[:, 3:5, :, :], 'b c (h i) (w j) -> b (h w) (c i j)', c=2, i=self.patch_size, j=self.patch_size)
