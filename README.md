@@ -1,74 +1,73 @@
-# scale-alibi implementation
+# Scale-ALiBi implementation
 
-`// todo: write readme`
+This repository contains all of the code for running and training Scale-ALiBi, as well as generating the dataset and reproducing CROMA's results.
 
-# notes
+Lay of the land:
 
-## imagery acesss
+Folder | Purpose
+--- | ---
+`lambdas` | AWS Lambdas for managing the dataset/tiles/checkpoints
+`notebooks` | Experimental notebooks
+`scale_alibi` | Python package containing all the code, see below for usage
+`site` | Scale-ALiBi website source
+`slurm` | Template SLURM jobs for training the model
 
-for sentinel-* access:
+## Getting the code
 
-```
-$ export STAC_API_URL=https://earth-search.aws.element84.com/v1
-$ stac-client search ${STAC_API_URL} -c sentinel-2-l2a --bbox -72.5 40.5 -72 41 --datetime 2020-01-01/2020-01-31 --matched
-```
+### setup
 
-will need to impl. parser and downloader, but that seems doable. i don't need this to work *consistently*, just enough to get some rasters down.
+You will need:
 
-
-download from aws opendata using a req. pays bucket ([sentinel-1](https://aws.amazon.com/marketplace/pp/prodview-uxrsbvhd35ifw?sr=0-18&ref_=beagle&applicationId=AWSMPContessa#resources), [sentinel-2](https://aws.amazon.com/marketplace/pp/prodview-2ostsvrguftb2?sr=0-20&ref_=beagle&applicationId=AWSMPContessa#usage))
-
-
-i ... might be able to do this with `jq` and tha `aws` cli, actually
-
-for example:
-
-NW atlanta (z/x/y): `9/135/204`
-
-Download the latest TCI image:
-
-```sh
-# create the geojson of the search area (xyz)
-echo "[135,204,9]" | mercantile shapes | jq .bbox -c | sed 's/\[//;s/\]//;s/,/ /g'
-
-# create the search
-stac-client search https://earth-search.aws.element84.com/v1 \
-    -c sentinel-2-l2a \
-    --bbox -85.078 33.724 -84.375 34.307 \
-    --query "eo:cloud_cover<10" \ 
-    --datetime 2024-08-01/2024-08-12 | jq . > search.json
-
-
-# for s3 requester pays
-# aws s3 cp --request-payer requester  `jq '.features[0].assets."visual-jp2".href' -r < search.json` .
-
-curl `jq '.features[0].assets.visual.href' -r < search.json` -o visual.tif
+1. Python (3.11 or higher)
+2. [Poetry](https://python-poetry.org)
+3. (optional) [`poetry-jupyter-plugin`](https://github.com/pkage/poetry-jupyter-plugin)
 
 ```
-
-similarly, for sentinel-1:
-
-```sh
-# create the geojson of the search area (xyz)
-echo "[135,204,9]" | mercantile shapes | jq .bbox -c | sed 's/\[//;s/\]//;s/,/ /g'
-
-# execute the search, this time without cloud cover filter (not necessary for SAR)
-stac-client search https://earth-search.aws.element84.com/v1 \
-    -c sentinel-1-grd \
-    --bbox -85.078 33.724 -84.375 34.307 \
-    --datetime 2024-08-01/2024-08-12 | jq . > search-s1.json
-
-# and download
-aws s3 cp  `jq '.features[0].assets.vv.href' -r < search-s1.json` vv.tif --request-payer requester
-aws s3 cp  `jq '.features[0].assets.vh.href' -r < search-s1.json` vh.tif --request-payer requester
+$ git clone https://github.com/pkage/scale-alibi
+$ cd scale-alibi
+$ poetry install
 ```
 
-```sh
+if you'd like to use the notebooks and you have `poetry-jupyter-plugin`
 
 ```
+$ poetry jupyter install
+```
 
-for NAIP:
+
+### training & inference
+
+
+
+### creating a new dataset
+
+
+
+## Citing
+
+If you'd like to use this code, please cite:
 
 ```
-https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false
+@inproceedings{kage_scalealibi_2024,
+  title = {{{Multi-modal}}, {{multi-scale}} {{representation learning}} for {{satellite imagery}} analysis just needs a good {{ALiBi}}}
+  shorttitle = {{{Scale-ALiBi}}},
+  author = {Kage, Patrick and Andreadis, Pavlos},
+  year = {2024},
+  month = oct,
+  abstract = {
+      Vision foundation models have been shown to be effective at processing
+      satellite imagery into representations fit for downstream tasks, however,
+      creating models which operate over multiple spatial resolutions and modes
+      is challenging. This paper presents Scale-ALiBi, a linear bias transformer
+      attention mechanism with a spatial encoding bias to relationships between
+      image patches at different ground sample distance scales. We provide an
+      implementation of Scale-ALiBi over a dataset of aligned high- and
+      low-resolution optical and low-resolution SAR satellite imagery data using
+      a triple-contrastive and reconstructive architecture, show an improvement
+      on the GEO-Bench benchmark, and release the newly curated dataset publicly.
+  },
+  copyright = {MIT License},
+  howpublished = {The University of Edinburgh}
+}
 ```
+
