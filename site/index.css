@@ -1,5 +1,12 @@
 :root {
-    font-family: "Inconsolata", monospace;
+    --font-header: 'IBM Plex Serif', Iowan Old Style, Apple Garamond, Baskerville, Times New Roman, Droid Serif, Times, Source Serif Pro, serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+    --font-code: 'IBM Plex Mono', Menlo, Consolas, Monaco, Liberation Mono, Lucida Console, monospace;
+
+    
+    --font-text: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, helvetica, Cantarell, Ubuntu, roboto, noto, arial, sans-serif;
+
+
+    font-family: var(--font-text);
     font-optical-sizing: auto;
     font-weight: 300;
     font-style: normal;
@@ -12,9 +19,11 @@
     --moonstone: #009fb7ff;
     --spring-green: #31e981ff;
 
+
+
     --fg: black;
     --bg: white;
-
+    --textcolor-link: var(--moonstone);
 
     background-color: var(--bg);
     color: var(--fg);
@@ -22,15 +31,323 @@
 
 body {
     margin: 0;
-    height: 100dvh;
+    /* height: 100dvh; */
+}
+
+p {
+    line-height: 1.5;
+}
+
+.map-container {
+    grid-column: 1/4;
+    min-height: 65dvh;
+    background-color: var(--tomato);
 }
 
 #map {
-    height: 100dvh;
-    background-color: black;
+    height: 65dvh;
 }
 
 .dg.ac {
     z-index: 10000 !important;
 }
 
+
+body {
+    font-size: 16px;
+    font-family: var(--font-text);
+    background-color: #FFFFFD;
+    color: #444;
+    margin: 0;
+}
+
+@media (min-width: 768px) {
+    .index__container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+}
+
+code {
+    font-size: 15px;
+    font-family: var(--font-code);
+}
+
+/* --- MAIN PAGE --- */
+
+.index {
+    padding: 5px;
+}
+
+@media (min-width: 768px) {
+    .index {
+        display: grid;
+        grid-template-columns: 200px auto;
+        grid-template-rows: 200px auto;
+        grid-gap: 20px 20px;
+    }
+
+    .about__mobileimage {
+        display: none;
+    }
+
+    .about__text {
+        margin: 0 0 !important;
+    }
+}
+
+.about__text {
+    font-family: var(--font-code);
+    margin: 1rem 0;
+}
+
+.about__mobileimage {
+    background-color: var(--color-accent);
+    width: 20px;
+    height: 20px;
+    margin-left: 1rem;
+
+}
+.about__image {
+    background-color: var(--color-accent);
+    display: block;
+}
+
+.about__title {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    font-family: var(--font-code);
+    font-weight: bold;
+    font-size: 1.5em;
+}
+
+ul.posts {
+    padding: 0;
+    margin: 0;
+    list-style-type: none;
+}
+
+.post {
+    font-family: var(--font-code);
+    margin-bottom: 5px;
+}
+
+.post__title {
+    color: var(--textcolor-aside);
+}
+
+/* --- ARTICLE STYLING --- */
+
+.post-layout {
+    grid-template-columns: 0px auto 0px;
+    grid-template-rows: 4em 1fr auto;
+}
+
+@media (min-width: 768px) {
+    .post-layout {
+        display: grid;
+        grid-template-columns: auto 48em auto;
+    }
+}
+
+nav {
+    color: var(--textcolor-aside);
+}
+
+
+.nav__left, .nav__center, .nav__right {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    font-family: var(--font-code);
+}
+
+.nav__left {
+    padding: 0 10px;
+    margin-right: 5px;
+}
+
+.nav__right {
+    padding-right: 10px;
+    text-align: right;
+}
+
+.nav__center {
+    flex-grow: 1;
+}
+
+.post-layout > nav {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    padding: 1rem;
+}
+
+@media (min-width: 768px) {
+    .post-layout > nav {
+        grid-column: 1 / 4;
+        display: grid;
+        grid-template-columns: subgrid;
+        grid-template-rows: auto;
+        align-items: stretch;
+        padding: 0;
+    }
+
+    .nav__left {
+        clip-path: polygon(0% 0%, 0% 100%, calc(100% - 15px) 100%, 100% 0%);
+    }
+}
+
+@media (max-width: 768px) {
+    .nav__left {
+        flex-direction: row;
+        padding: 0;
+    }
+    .nav__left::before {
+        content: '\2190';
+        margin-right: 0.6rem;
+    }
+}
+
+.post-layout > article {
+    grid-column: 2 / 3;
+    /* grid-row: 2 / 3; */
+}
+
+.post-layout > footer {
+    grid-column: 2 / 3;
+    /* grid-row: 3 / 4; */
+}
+
+article { 
+    line-height: 1.4em;
+    padding: 10px;
+}
+
+@media (min-width: 768px) {
+    article {
+        padding: 0;
+    }
+}
+
+@media (min-width: 768px) {
+    article {
+        max-width: 48em;
+    }
+
+    footer {
+        width: 48em;
+    }
+    h1 {
+        font-size: 3.25rem !important;
+    }
+}
+
+.highlight { margin: 0; }
+.highlighter-rouge > div.highlight {
+    padding: 10px;
+    overflow-x: auto;
+}
+
+h1 {
+    font-size: 2rem;
+    line-height: 1.2em;
+
+    font-family: var(--font-header);
+}
+
+h2,h3,h4,h5 {
+    margin-top: 1.5em;
+    font-family: var(--font-header);
+}
+
+img {
+    width: 100%;
+    height: auto;
+}
+
+footer {
+    border-top: 1px solid var(--textcolor-aside);
+
+    margin: 1rem 0;
+    padding-top: 1rem;
+    text-align: right;
+    
+    font-family: var(--font-code);
+    color: var(--textcolor-aside);
+}
+
+a {
+    color: var(--textcolor-link);
+    text-decoration: none;
+    transition: color 0.15s cubic-bezier(0,0,0.3,1), background-color 0.15s cubic-bezier(0,0,0.3,1);
+}
+
+a:hover {
+    color: white !important;
+    background-color: var(--textcolor-link);
+}
+
+a:visited {
+    color: var(--textcolor-link);
+}
+
+.colorblock {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 2px;
+}
+
+.has-authors {
+    margin-bottom: 1rem;
+}
+
+.authors {
+    font-size: 1.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.paperlinks {
+    padding: 1rem 0;
+}
+
+.paperlink {
+    padding: 0.2rem 0.5rem;
+}
+
+.paperlink > i {
+    padding-right: 0.1rem;
+}
+
+.map-controls {
+    padding: 1rem 0;
+}
+
+.map-controls select, .map-controls button {
+    background-color: transparent;
+    outline: 0;
+    border: 1px solid var(--fg);
+    font-size: 1rem;
+    padding: 8px;
+    border-radius: 5px;
+    margin-right: 0.5rem;
+    cursor: pointer;
+
+    transition: color 0.15s cubic-bezier(0,0,0.3,1), background-color 0.15s cubic-bezier(0,0,0.3,1);
+}
+
+.map-controls button:hover {
+    color: var(--bg);
+    background-color: var(--fg);
+}
+.map-controls button:active {
+    color: var(--fg);
+    background-color: var(--bg);
+}
