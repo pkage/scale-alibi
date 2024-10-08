@@ -36,6 +36,7 @@ body {
 
 p {
     line-height: 1.5;
+    text-align: justify;
 }
 
 .map-container {
@@ -350,4 +351,9 @@ a:visited {
 .map-controls button:active {
     color: var(--fg);
     background-color: var(--bg);
+}
+
+img.figure {
+    height: auto;
+    width: 100%;
 }

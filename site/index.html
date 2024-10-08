@@ -32,7 +32,7 @@
             <article>
                 <h1 class="has-authors">Multi-modal, Multi-scale Representation Learning for Satellite Imagery Analysis Just Needs a Good ALiBi</h1>
                 <div class="authors">
-                    <a target="_blank" href="//ka.ge">Patrick Kage</a><sup>1</sup> and <a href="#">Pavlos Andreadis</a><sup>1</sup>
+                    <a target="_blank" href="//ka.ge">Patrick Kage</a><sup>1</sup> and <a href="https://www.linkedin.com/in/pandreadis/">Pavlos Andreadis</a><sup>1</sup>
                 </div>
 
                 <div class="institution">
@@ -42,6 +42,7 @@
                 <div class="paperlinks">
                     <a href="https://kage.zip/papers/kage_siw_workshop_2024.pdf" target="_blank" class="paperlink"><i class="fa-solid fa-book"></i> <span>Paper</span></a>
                     <a href="//github.com/pkage/scale-alibi" target="_blank" class="paperlink"><i class="fa-brands fa-github"></i> <span>Source code</span></a>
+                    <a href="https://kage.zip/papers/kage_siw_slides_2024.pdf" target="_blank" class="paperlink"><i class="fa-solid fa-person-chalkboard"></i> <span>Slides</span></a>
                 </div>
                 
                 
@@ -60,6 +61,15 @@
                     a triple-contrastive and reconstructive architecture, show an improvement
                     on the GEO-Bench benchmark, and release the newly curated dataset publicly.
                 </p>
+
+                <h2>Architecture</h2>
+
+                <img src="architecture.svg" class="figure" alt="scale-alibi architecture">
+
+                <p>
+                    <i>Figure. </i> The Scale-ALiBi architecture. Read the full paper <a href="https://kage.zip/papers/kage_siw_workshop_2024.pdf" target="_blank">here</a>.
+                </p>
+                
 
                 <h2>Datasets</h2>
 
@@ -107,17 +117,62 @@
                 
             </div>
             <article>
-                <h2>Samples</h2>
+                <h2>Dataset downloads</h2>
 
                 <p>
-                    You probably haven't heard of them edison bulb squid prism quinoa. Narwhal vinyl beard taxidermy. Williamsburg blog meditation, fashion axe scenester seitan tacos woke. Jean shorts aesthetic ennui mixtape synth pinterest. Coloring book lo-fi meh man bun, disrupt yes plz salvia yuccie kale chips sriracha vaporware beard williamsburg. Banh mi dreamcatcher vibecession grailed everyday carry gentrify af, vinyl cred lyft vexillologist kale chips etsy banjo paleo. Bushwick coloring book af fingerstache, VHS tofu Brooklyn skateboard.
+                These datasets are provided as <a href="https://docs.protomaps.com/pmtiles/">Protomap tile bundles</a>.
+                Please see the <a href="https://github.com/pkage/scale-alibi">source</a> for instructions on how to load
+                    and process these datasets.
                 </p>
+                
+
+                <ul>
+                    <li>
+                        <strong>Full</strong>
+                        <ul>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/sar_tiles.pmtile" target="_blank">sar_tiles.pmtile</a> <span>(6.3 GB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/visual_tiles.pmtile" target="_blank">visual_tiles.pmtile</a> <span>(5.6 GB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/hires_visual_tiles.pmtile" target="_blank">hires_visual_tiles.pmtile</a> <span>(10.2 GB)</span>
+                            </li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Small</strong>
+                        <ul>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/sar_tiles_small.pmtile" target="_blank">sar_tiles_small.pmtile</a> <span>(2.0 GB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/visual_tiles_small.pmtile" target="_blank">visual_tiles_small.pmtile</a> <span>(771.1 MB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/hires_visual_tiles_small.pmtile" target="_blank">hires_visual_tiles_small.pmtile</a> <span>(1.5 GB)</span>
+                            </li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>Micro</strong>
+                        <ul>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/sar_tiles_micro.pmtile" target="_blank">sar_tiles_micro.pmtile</a> <span>(2.0 GB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/visual_tiles_micro.pmtile" target="_blank">visual_tiles_micro.pmtile</a> <span>(1.0 GB)</span>
+                            </li>
+                            <li>
+                                <a href="https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/hires_visual_tiles_micro.pmtile" target="_blank">hires_visual_tiles_micro.pmtile</a> <span>(10.4 GB)</span>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+
             </article>
             <footer>
-                <span class="colorblock" style="background-color: var(--tomato);"></span>
-                <span class="colorblock" style="background-color: var(--spring-green);"></span>
-                <span class="colorblock" style="background-color: var(--moonstone);"></span>
-                
                 <span>Patrick Kage &bull; 08 Oct 2024</span>
             </footer>
             <!--div id="map"></div-->

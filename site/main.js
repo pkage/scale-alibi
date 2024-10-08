@@ -41,7 +41,7 @@ window.presign_url = presign_url
 
 
 const setup_map = () => {
-    const map = L.map('map').setView(LOC_CENTER, 5)
+    const map = L.map('map').setView(LOC_CENTER, 4)
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
