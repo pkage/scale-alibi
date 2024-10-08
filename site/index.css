@@ -357,3 +357,8 @@ img.figure {
     height: auto;
     width: 100%;
 }
+
+.sample-count {
+    margin-left: 0.25em;
+    opacity: 0.6;
+}
