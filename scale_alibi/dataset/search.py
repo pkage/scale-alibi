@@ -326,7 +326,7 @@ def create_scl_script(items: List[Item], tile_level: int):
 
         process_item = dedent(f'''\
             if ! [ -f ./tiles/{tile_filename} ]; then
-                salibi raster tile-visual -i ./rasters/{visual_filename}  -o ./tiles/{tile_filename} -l {tile_level}
+                salibi raster tile-scl -i ./rasters/{visual_filename}  -o ./tiles/{tile_filename} -l {tile_level}
             else
                 echo "{tile_filename} has been generated already"
             fi

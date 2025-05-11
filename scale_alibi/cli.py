@@ -17,6 +17,7 @@ from . import console, pprint
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images, create_scl_script
 from .dataset.tile import (
     convert_to_png_sar_tiles,
+    convert_to_png_scl_tiles,
     convert_to_png_tiles,
     create_downsamples,
     create_zoom_list,
@@ -153,6 +154,15 @@ def raster_process_geotiff_sar(vv, vh, output, level):
     
     convert_to_png_sar_tiles(vv, vh, output, min_zoom=level, max_zoom=level+1)
 
+@raster.command('tile-scl', help='create pmtile archive from a tiff file')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tiff files', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
+@click.option('-l', '--level', type=int, help='Z level to create tiles at', default=17)
+def raster_process_geotiff_scl(input, output, level):
+    console.log(input, output, level)
+    
+    # get_tile_schedule(input, min_zoom=level, max_zoom=level+1, quiet=False)
+    convert_to_png_scl_tiles(input, output, min_zoom=level, max_zoom=level+1)
 
 # def create_downsamples(filename: str, outfile: str, source_level: Optional[int], final_level: int, resampling: Optional[Resampling] = Resampling.NEAREST):
 

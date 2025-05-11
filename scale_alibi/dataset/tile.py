@@ -190,6 +190,35 @@ def create_png_tile(datasets: List[Reader], tile: Tile) -> bytes:
 
     return io.getvalue()
 
+
+def create_png_scl_tile(datasets: List[Reader], tile: Tile) -> bytes:
+    tile_data = datasets[0].tile(tile.x, tile.y, tile.z)
+
+    # create a Pillow image from the rearranged rio_tiler ImageData
+
+    channel = np.array(tile_data.array, dtype=np.uint8)
+
+    img_data = np.stack([
+        channel,
+        channel * 10,
+        channel * 10
+    ], axis=2)
+
+    tile_img = Image.fromarray(
+        img_data
+    )
+
+    tile_img.putalpha(
+        Image.fromarray(tile_data.mask)
+    )
+
+
+    io = BytesIO()
+    tile_img.save(io, format='PNG')
+
+    return io.getvalue()
+
+
 def create_numpy_tile(datasets: List[Reader], tile: Tile):
     tile_data = []
     for dataset in datasets:
@@ -389,6 +418,20 @@ def convert_to_png_sar_tiles(
         tile_processor=create_png_sar_tile
     )
 
+def convert_to_png_scl_tiles(
+        infile: str,
+        outfile: str,
+        min_zoom: int = 6,
+        max_zoom: int = 14
+    ):
+    return convert_to_tiles(
+        [infile],
+        outfile,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
+        tile_type=TileType.PNG,
+        tile_processor=create_png_scl_tile
+    )
 
 def get_tile_list(tilesets: List[str]) -> np.ndarray:
     tileid_list = set()
