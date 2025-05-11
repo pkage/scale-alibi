@@ -14,7 +14,7 @@ import torch.distributed as dist
 from .train import CromaParams, ScaleAlibiParams, TrainParams, cleanup, croma_train, salibi_train
 
 from . import console, pprint
-from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images
+from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images, create_scl_script
 from .dataset.tile import (
     convert_to_png_sar_tiles,
     convert_to_png_tiles,
@@ -106,6 +106,27 @@ def download_visual(tiles, output, tile_level):
     with open(output, 'w') as fp:
         fp.write(script)
 
+
+@download.command('scl')
+@click.option('-t', '--tiles', type=str, help='tile in Z/X/Y. can accept multple', multiple=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output script', required=True)
+@click.option('-l', '--tile-level', type=int, help='generate tiles at this level', default=15)
+def download_scl(tiles, output, tile_level):
+    all_images = []
+    for tile in tiles:
+        tile = parse_tile(tile)
+
+        images = get_visual_images(
+            tile,
+            pendulum.now().subtract(weeks=4)
+        )
+
+        all_images += images
+
+    script = create_scl_script(all_images, tile_level)
+
+    with open(output, 'w') as fp:
+        fp.write(script)
 
 @cli.group('raster')
 def raster():

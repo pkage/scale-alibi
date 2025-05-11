@@ -306,3 +306,91 @@ def create_visual_script(items: List[Item], tile_level: int):
     
 
     return script
+
+
+def create_scl_script(items: List[Item], tile_level: int):
+    def create_download_process_script(item: Item):
+        item_name = item.id
+        visual_filename = f'{item_name}-scl.tif'
+        tile_filename = f'{item_name}-scl.pmtile'
+
+        visual_url = item.assets['scl'].href
+        download_item = dedent(f'''\
+            if ! [ -f ./rasters/{visual_filename} ]; then
+                echo "{visual_filename} not found, downloading..."
+                curl -L -J {visual_url} -o ./rasters/{visual_filename}
+            else
+                echo "{visual_url} has been downloaded already"
+            fi
+        ''')
+
+        process_item = dedent(f'''\
+            if ! [ -f ./tiles/{tile_filename} ]; then
+                salibi raster tile-visual -i ./rasters/{visual_filename}  -o ./tiles/{tile_filename} -l {tile_level}
+            else
+                echo "{tile_filename} has been generated already"
+            fi
+        ''')
+
+        return download_item, process_item, tile_filename
+    
+    header = dedent('''\
+        #! /bin/sh
+
+        mkdir -p rasters
+        mkdir -p tiles
+    ''')
+
+    download_items = []
+    process_items = []
+    tile_files = []
+
+    for item in items:
+        download, process, tile_filename = create_download_process_script(item)
+
+        download_items.append(download)
+        process_items.append(process)
+        tile_files.append(tile_filename)
+
+    script = header + '\n\necho "---- DOWNLOADING ---"\n\n'
+
+    for i, chunk in enumerate(download_items):
+        script += f'echo "downloading {i+1} of {len(download_items)}"\n'
+        script += chunk
+
+    script += '\n\necho "---- PROCESSING ---"\n\n'
+
+    for i, chunk in enumerate(process_items):
+        script += f'echo "processing {i+1} of {len(download_items)}"\n'
+        script += chunk
+
+    script += '\n\necho "---- FINALIZING ---"\n\n'
+
+    # merges
+    script += 'echo "merging tiles..."\n'
+    
+    merged_tile_name = 'scl_tiles.pmtile'
+    tile_inputs = ' '.join([f'-i ./tiles/{fn}' for fn in tile_files])
+
+    script +=  dedent(f'''\
+        if ! [ -f ./{merged_tile_name} ]; then
+            salibi raster merge {tile_inputs} -o ./{merged_tile_name}
+        else
+            echo "merged tileset {merged_tile_name} has been generated already"
+        fi
+    ''')
+
+    script += 'echo "creating display tileset..."\n'
+    
+    downsample_tile_name = 'scl_tiles_display.pmtile'
+
+    script +=  dedent(f'''\
+        if ! [ -f ./{downsample_tile_name} ]; then
+            salibi raster downsample -i ./{merged_tile_name} -o ./{downsample_tile_name} -l {tile_level}
+        else
+            echo "downsampled tileset {downsample_tile_name} has been generated already"
+        fi
+    ''')
+    
+
+    return script
