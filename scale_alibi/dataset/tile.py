@@ -196,12 +196,12 @@ def create_png_scl_tile(datasets: List[Reader], tile: Tile) -> bytes:
 
     # create a Pillow image from the rearranged rio_tiler ImageData
 
-    channel = np.array(tile_data.array, dtype=np.uint8)
+    channel = np.array(tile_data.array, dtype=np.uint8).squeeze()
 
     img_data = np.stack([
         channel,
-        channel * 10,
-        channel * 10
+        channel * 15,
+        channel * 15
     ], axis=2)
 
     tile_img = Image.fromarray(
