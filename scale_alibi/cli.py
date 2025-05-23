@@ -25,6 +25,7 @@ from .dataset.tile import (
     get_tile_list,
     merge_tilesets,
     remove_alpha_tiles,
+    tileid_to_zxy
 )
 
 def parse_tile(tile_str: str) -> mercantile.Tile:
@@ -170,14 +171,15 @@ def raster_process_geotiff_scl(input, output, level):
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile archive', required=True)
 @click.option('-l', '--level', type=int, help='Z level to source from', default=17)
-def raster_downsample(input, output, level):
+@click.option('-f', '--final-level', type=int, default=1, help='final Z level to create')
+def raster_downsample(input, output, level, final_level):
     console.log(input, output, level)
     
     create_downsamples(
         input,
         output,
         level,
-        1
+        final_level
     )
 
 @raster.command('merge', help='merge pmtile archives into one')
@@ -200,6 +202,30 @@ def raster_tile_list(input, output):
     arr = get_tile_list(input)
     console.log(f'found {arr.shape[0]} tiles')
     np.save(output, arr)
+
+
+@raster.command('info', help='get all tiles in a raster as a list')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True, multiple=True)
+def raster_tile_info(input):
+    # calculate tile list
+    arr = get_tile_list(input)
+
+    # parse the tile list
+    z_indices = {}
+    for tileid in arr:
+        z, _, _ = tileid_to_zxy(tileid)
+
+        if not z in z_indices:
+            z_indices[z] = 1
+        else:
+            z_indices[z] += 1
+
+    # format for printing
+    z_indices = [z for z in z_indices.items()]
+    z_indices.sort(key=lambda p: p[0])
+
+    for z, count in  z_indices:
+        console.print(f'level [blue]{z}[/]: [green]{count}[/] tiles.')
 
 
 @raster.command('tile-zoom', help='get all tiles in a raster as a list')
@@ -385,6 +411,7 @@ def croma():
 @click.option('-b', '--batch-size', type=int, required=True, help='batch size')
 @click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
+@click.option('--no-resume', is_flag=True, help='always start from scratch')
 @click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
 @click.option('--half-resolution', type=bool, is_flag=True, help='train at half resolution to conserve vram')
@@ -399,6 +426,7 @@ def cli_croma_train( # rename so it doesn't clash
         batch_size,
         device,
         mask_ratio,
+        no_resume,
         nccl_bind,
         amp,
         half_resolution
@@ -422,7 +450,8 @@ def cli_croma_train( # rename so it doesn't clash
         run_name=run_name,
         device=device,
         amp=amp,
-        nccl_bind=nccl_bind
+        nccl_bind=nccl_bind,
+        resume=not no_resume # resume by default
     )
 
 
@@ -463,6 +492,7 @@ def cli_croma_train( # rename so it doesn't clash
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
 @click.option('--patch-size', type=int, default=16, help='side length of patches to make')
 @click.option('--patch-count', type=int, default=256, help='number of patches to target')
+@click.option('--no-resume', is_flag=True, help='always start from scratch')
 @click.option('--nccl-bind', type=str, default='tcp://localhost:33445', help='distributed synchronization store')
 @click.option('--amp', type=bool, is_flag=True, help='enable automatic mixed precision')
 @click.option('--half-resolution', type=bool, is_flag=True, help='train at half resolution to conserve vram')
@@ -480,6 +510,7 @@ def cli_salibi_train(
         mask_ratio,
         patch_size,
         patch_count,
+        no_resume,
         nccl_bind,
         amp,
         half_resolution
@@ -507,7 +538,8 @@ def cli_salibi_train(
         run_name=run_name,
         device=device,
         amp=amp,
-        nccl_bind=nccl_bind
+        nccl_bind=nccl_bind,
+        resume=not no_resume
     )
 
 

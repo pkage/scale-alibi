@@ -1,7 +1,8 @@
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 import os
 from pathlib import Path
-
+import shutil
+from sys import modules
 
 import torch
 from torch.cuda.amp import GradScaler, autocast
@@ -15,7 +16,15 @@ import wandb
 from . import console
 from .croma.pretrain_croma import CROMA
 from .croma.pretrain_croma import get_mask as get_croma_mask
-from .dataset.loader import PMTileDataset, PMTile4xDataset, RemoveChannels, LoresMultimodalDataset, ChannelsFirstImageOrder, MultimodalDataset, HalfResolution
+from .dataset.loader import (
+    ChannelsFirstImageOrder,
+    HalfResolution,
+    LoresMultimodalDataset,
+    MultimodalDataset,
+    PMTile4xDataset,
+    PMTileDataset,
+    RemoveChannels,
+)
 from .model import ScaleAlibi
 from .model import get_mask as get_salibi_mask
 
@@ -71,6 +80,7 @@ class TrainParams:
     device: str
     amp: bool
     nccl_bind: str
+    resume: bool = True
     
 
 # --- COMMON ---
@@ -198,8 +208,24 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
     # optimizer
     optimizer = Adam(model.parameters(), lr=croma_params.learning_rate)
 
+    # Load from checkpoint if resume is True
+    if train_params.resume:
+        checkpoint_path = train_params.checkpoint_dir / f'croma_checkpoint_{train_params.run_name}_latest.pth'
+        if checkpoint_path.exists():
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            console.print(f'Resuming training from epoch {start_epoch}')
+        else:
+            console.print('[red]Checkpoint not found, starting from scratch')
+            start_epoch = 0
+    else:
+        start_epoch = 0
+
+
     # now we begin!
-    for epoch in range(croma_params.epochs):
+    for epoch in range(start_epoch, croma_params.epochs):
         console.print(f'beginning epoch {epoch}/{croma_params.epochs} (rank {rank}/{world_size})')
         model.train()
 
@@ -287,7 +313,16 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
         # Save the model checkpoint after each epoch (only rank 0 saves to avoid duplication)
         if rank == 0:
             model_path = train_params.checkpoint_dir / f'croma_checkpoint_{train_params.run_name}_epoch_{epoch}.pth'
-            torch.save(model.state_dict(), model_path)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+            }, model_path)
+
+            # Save the latest checkpoint
+            latest_model_path = train_params.checkpoint_dir / f'croma_checkpoint_{train_params.run_name}_latest.pth'
+            shutil.copy(model_path, latest_model_path)
+
 
 # --- SCALE ALIBI TRAINING ---
             
@@ -401,8 +436,23 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
     # optimizer
     optimizer = Adam(model.parameters(), lr=salibi_params.learning_rate)
 
+    # Load from checkpoint if resume is True
+    if train_params.resume:
+        checkpoint_path = train_params.checkpoint_dir / f'salibi_checkpoint_{train_params.run_name}_latest.pth'
+        if checkpoint_path.exists():
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            console.print(f'Resuming training from epoch {start_epoch}')
+        else:
+            console.print('[red]Checkpoint not found, starting from scratch')
+            start_epoch = 0
+    else:
+        start_epoch = 0
+
     # now we begin!
-    for epoch in range(salibi_params.epochs):
+    for epoch in range(start_epoch, salibi_params.epochs):
         console.print(f'beginning epoch {epoch}/{salibi_params.epochs} (rank {rank}/{world_size})')
         model.train()
 
@@ -502,4 +552,16 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
         # Save the model checkpoint after each epoch (only rank 0 saves to avoid duplication)
         if rank == 0:
             model_path = train_params.checkpoint_dir / f'salibi_checkpoint_{train_params.run_name}_epoch_{epoch}.pth'
-            torch.save(model.state_dict(), model_path)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+            }, model_path)
+
+            # Save the latest checkpoint
+            latest_model_path = train_params.checkpoint_dir / f'salibi_checkpoint_{train_params.run_name}_latest.pth'
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+            }, latest_model_path)
