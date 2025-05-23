@@ -1,52 +1,54 @@
-[tool.poetry]
+[project]
 name = "scale-alibi"
 version = "0.1.0"
 description = ""
-authors = ["Patrick Kage <patrick.r.kage@gmail.com>"]
-license = "MIT"
+authors = [{ name = "Patrick Kage", email = "patrick.r.kage@gmail.com" }]
+requires-python = ">=3.11,<3.13"
 readme = "README.md"
-packages = [{include = "scale_alibi"}]
+license = "MIT"
+dependencies = [
+    "torch>=2.4.0,<3",
+    "torchvision>=0.19.0,<0.20",
+    "pmtiles>=3.3.0,<4",
+    "rich>=13.7.1,<14",
+    "httpx>=0.27.0,<0.28",
+    "asyncclick>=8.1.7.2,<9",
+    "pillow>=10.4.0,<11",
+    "pydantic>=2.8.2,<3",
+    "shapely>=2.0.5,<3",
+    "rio-tiler>=6.6.1,<7",
+    "rasterio>=1.3.10,<2",
+    "geojson-pydantic>=1.1.0,<2",
+    "supermercado>=0.2.0,<0.3",
+    "einops>=0.8.0,<0.9",
+    "wandb>=0.17.5,<0.18",
+    "python-dotenv>=1.0.1,<2",
+    "pystac-client>=0.8.3,<0.9",
+    "pendulum>=3.0.0,<4",
+    "boto3>=1.34.149,<2",
+    "geobench>=1.0.0,<2",
+    "scikit-learn>=1.5.2,<2",
+    "numpy<2.0.0",
+    "matplotlib>=3.9.2,<4",
+    "umap-learn>=0.5.6,<0.6",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-torch = "^2.4.0"
-torchvision = "^0.19.0"
-pmtiles = "^3.3.0"
-rich = "^13.7.1"
-httpx = "^0.27.0"
-asyncclick = "^8.1.7.2"
-# matplotlib = "^3.9.1"
-pillow = "^10.4.0"
-pydantic = "^2.8.2"
-shapely = "^2.0.5"
-rio-tiler = "^6.6.1"
-rasterio = "^1.3.10"
-geojson-pydantic = "^1.1.0"
-supermercado = "^0.2.0"
-einops = "^0.8.0"
-wandb = "^0.17.5"
-python-dotenv = "^1.0.1"
-pystac-client = "^0.8.3"
-pendulum = "^3.0.0"
-boto3 = "^1.34.149"
-geobench = "^1.0.0"
-scikit-learn = "^1.5.2"
-numpy = "<2.0.0"
-matplotlib = "^3.9.2"
-umap-learn = "^0.5.6"
-
-
-[tool.poetry.scripts]
+[project.scripts]
 salibi = "scale_alibi:cli.cli"
+
+[dependency-groups]
+dev = ["ipykernel>=6.29.5,<7"]
+
+[tool.hatch.build.targets.sdist]
+include = ["scale_alibi"]
+
+[tool.hatch.build.targets.wheel]
+include = ["scale_alibi"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.jupyter.kernel]
 name = "scale-alibi"
 display = "scale-alibi"
-
-
-[tool.poetry.group.dev.dependencies]
-ipykernel = "^6.29.5"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

@@ -7,7 +7,7 @@ dataset/
 logs/
 checkpoints
 checkpoints/
-scale_alibi/dataset/download.py
+# scale_alibi/dataset/download.py
 viewer/public/rasters/
 viewer/public/rasters
 rasters/
