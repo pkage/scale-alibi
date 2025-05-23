@@ -211,18 +211,19 @@ def raster_tile_info(input):
     arr = get_tile_list(input)
 
     # parse the tile list
-    z_indices = {}
-    for tileid in arr:
-        z, _, _ = tileid_to_zxy(tileid)
+    with console.status('crunching numbers...'):
+        z_indices = {}
+        for tileid in arr:
+            z, _, _ = tileid_to_zxy(tileid)
 
-        if not z in z_indices:
-            z_indices[z] = 1
-        else:
-            z_indices[z] += 1
+            if not z in z_indices:
+                z_indices[z] = 1
+            else:
+                z_indices[z] += 1
 
-    # format for printing
-    z_indices = [z for z in z_indices.items()]
-    z_indices.sort(key=lambda p: p[0])
+        # format for printing
+        z_indices = [z for z in z_indices.items()]
+        z_indices.sort(key=lambda p: p[0])
 
     for z, count in  z_indices:
         console.print(f'level [blue]{z}[/]: [green]{count}[/] tiles.')
