@@ -317,6 +317,8 @@ def croma_train(rank: int, world_size: int, croma_params: CromaParams, train_par
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'model_args': asdict(croma_params),
+                'train_args': asdict(train_params)
             }, model_path)
 
             # Save the latest checkpoint
@@ -556,12 +558,10 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'model_args': asdict(salibi_params),
+                'train_args': asdict(train_params)
             }, model_path)
 
             # Save the latest checkpoint
             latest_model_path = train_params.checkpoint_dir / f'salibi_checkpoint_{train_params.run_name}_latest.pth'
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-            }, latest_model_path)
+            shutil.copy(model_path, latest_model_path)
