@@ -25,9 +25,9 @@ export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
 if [ ! -d .venv ]; then
     python3 -m venv .venv
+    uv pip install -e .
 fi
 source .venv/bin/activate
-uv pip install -e .
 
 # perf tuning
 export OMP_NUM_THREADS=16
