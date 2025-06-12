@@ -1,7 +1,6 @@
-#! /bin/bash
-
 #!/bin/bash
-# aiai valluvar download
+
+# aiai valluvar copy to storage lock
 
 #SBATCH --partition=AIAI_GPU
 #SBATCH --ntasks=1
@@ -27,14 +26,15 @@ cd $PROJ_DIR
 
 # download
 
-download_dataset() {
-    if ! [ -s $LSCRATCH/$1 ]; then
-        curl -L https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/$1 -o $LSCRATCH/$1
-    else
-        echo "$1 has already been downloaded"
-    fi
-}
+mkdir $LSCRATCH/composite
 
-download_dataset composite/sar.pmtile
-download_dataset composite/visual.pmtile
-download_dataset composite/hires_visual.pmtile
+echo "copying sar"
+cp ./data/composite/sar.pmtile $LSCRATCH/composite/sar.pmtile
+
+echo "copying visual"
+cp ./data/composite/visual.pmtile $LSCRATCH/composite/visual.pmtile
+
+echo "copying hires"
+cp ./data/composite/hires_visual.pmtile $LSCRATCH/composite/hires_visual.pmtile
+
+echo "done!"
