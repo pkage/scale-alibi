@@ -5,10 +5,10 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:A40:4
-#SBATCH --output=/home/s1734411/scale-alibi/logs/salibi_small_stdout.txt
-#SBATCH --error=/home/s1734411/scale-alibi/logs/salibi_small_stderr.txt
+#SBATCH --output=/home/s1734411/scale-alibi/logs/salibi_next_stdout.txt
+#SBATCH --error=/home/s1734411/scale-alibi/logs/salibi_next_stderr.txt
 #SBATCH --time=12:00:00
-#SBATCH --job-name=sa-p8-micro
+#SBATCH --job-name=sn-p8-micro
 #SBATCH --mail-user=p.kage@ed.ac.uk
 #SBATCH --mail-type=ALL
 #SBATCH --chdir=/home/s1734411/scale-alibi/
@@ -45,7 +45,7 @@ salibi hardware
 salibi train \
 	--lores $LSCRATCH/datasets/composite/visual.pmtile \
 	--radar $LSCRATCH/datasets/composite/sar.pmtile \
-	--hires $LSCRATCH/datasets/composite/hires_viusal.pmtile \
+	--hires $LSCRATCH/datasets/composite/hires_visual.pmtile \
 	--ckpts $LSCRATCH/checkpoints/sibinxt_micro_p8 \
 	--run-name sibinxt_micro_p8 \
 	--learning-rate 1e-4 \
