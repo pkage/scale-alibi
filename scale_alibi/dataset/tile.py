@@ -454,6 +454,27 @@ def get_tile_list(tilesets: List[str]) -> np.ndarray:
     return np.array(tileid_list)
 
 
+def get_tile_list_all(tilesets: List[str]) -> np.ndarray:
+    tileid_list = []
+    with console.status('gathering metadata...'):
+        for filename in tilesets:
+            with open(filename, 'rb') as fp:
+                source = MmapSource(fp)
+
+                tiles = []
+                for zxy, _ in all_tiles(source):
+                    tileid = zxy_to_tileid(zxy[0], zxy[1], zxy[2])
+                    tiles.append(tileid)
+
+                # convert to a set to make my life a little easier
+                tileid_list += tiles
+
+    tileid_list = list(tileid_list)
+    tileid_list.sort()
+
+    return np.array(tileid_list)
+
+
 def create_zoom_list(tile_list: np.ndarray, source_level: int, target_levels: List[int]) -> np.ndarray:
     source_tiles = []
     out_tiles = []
@@ -675,7 +696,7 @@ def combine_tiles_images(parent_tile: Tile, sub_tiles: List[Tuple[Tile, bytes]],
     output = output.resize(dims, resample=resampling)
 
     io = BytesIO()
-    output.save(io, format='PNG')
+    output.save(io, format='JPG')
     return io.getvalue()
     
 

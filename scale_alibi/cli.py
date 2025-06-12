@@ -13,7 +13,7 @@ import torch.distributed as dist
 
 from .train import CromaParams, ScaleAlibiParams, TrainParams, cleanup, croma_train, salibi_train
 
-from . import console, pprint
+from . import console, pprint, track
 from .dataset.search import create_sar_script, create_visual_script, get_sar_images, get_visual_images, create_scl_script
 from .dataset.tile import (
     convert_to_png_sar_tiles,
@@ -23,6 +23,7 @@ from .dataset.tile import (
     create_zoom_list,
     repair_broken_tiles,
     get_tile_list,
+    get_tile_list_all,
     merge_tilesets,
     remove_alpha_tiles,
     tileid_to_zxy
@@ -40,8 +41,42 @@ def cli():
     pass
 
 @cli.command('debug', help='debug hook')
-def cli_debug():
-    ...
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output numpy array', required=True)
+def cli_debug(input, output):
+    from pmtiles.reader import MmapSource
+    from pmtiles.tile import deserialize_header
+    from .dataset.pmtile import all_tile_entries
+
+    console.log(f'beginning read of {input}...')
+
+    get_bytes = MmapSource(open(input, 'rb'))
+    header = deserialize_header(get_bytes(0,127))
+
+    pprint(header)
+
+    tiles = []
+    with console.status('reading...'):
+        for tile,_, size in all_tile_entries(get_bytes):
+            tiles.append((tile, size))
+
+    tiles = np.array(tiles)
+
+    console.log(f'found {tiles.shape[0]} tiles')
+
+    sizes = tiles[:,1]
+
+    console.log(f'mean: {np.mean(sizes)} bytes ({np.mean(sizes)/1024:2} kib)')
+    console.log(f'medn: {np.median(sizes)} bytes ({np.mean(sizes)/1024:2} kib)')
+
+    console.log(f'min: {np.min(sizes)} bytes ({np.min(sizes)/1024:2} kib)')
+    console.log(f'max: {np.max(sizes)} bytes ({np.max(sizes)/1024:2} kib)')
+
+    for q in [0, .2, .4, .6, .8, 1]:
+        quantile = np.quantile(sizes, q)
+        console.log(f'q[bold cyan]{q:3}[/]: {quantile} bytes ({quantile / 1024:02} kib)')
+
+
 
 @cli.command('hardware', help='show hardware status')
 def cli_hardware():
@@ -196,38 +231,103 @@ def raster_merge(input, output):
 @raster.command('tile-list', help='get all tiles in a raster as a list')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True, multiple=True)
 @click.option('-o', '--output', type=click.Path(writable=True), help='output tile list (npy)', required=True)
-def raster_tile_list(input, output):
+@click.option('--all', is_flag=True, help='when set, do not perform deduplication')
+def raster_tile_list(input, output, all):
     console.log(input, output)
 
-    arr = get_tile_list(input)
+    if all:
+        arr = get_tile_list_all(input)
+    else:
+        arr = get_tile_list(input)
+
     console.log(f'found {arr.shape[0]} tiles')
     np.save(output, arr)
 
 
 @raster.command('info', help='get all tiles in a raster as a list')
-@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True, multiple=True)
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
 def raster_tile_info(input):
+    from .dataset.pmtile import tile_get_all_ids
     # calculate tile list
-    arr = get_tile_list(input)
+    arr = tile_get_all_ids(input)
 
     # parse the tile list
-    with console.status('crunching numbers...'):
-        z_indices = {}
-        for tileid in arr:
-            z, _, _ = tileid_to_zxy(tileid)
+    z_indices = {}
+    for tileid in track(arr, description='crunching numbers'):
+        z, _, _ = tileid_to_zxy(tileid)
 
-            if not z in z_indices:
-                z_indices[z] = 1
-            else:
-                z_indices[z] += 1
+        if not z in z_indices:
+            z_indices[z] = 1
+        else:
+            z_indices[z] += 1
 
-        # format for printing
-        z_indices = [z for z in z_indices.items()]
-        z_indices.sort(key=lambda p: p[0])
+    # format for printing
+    z_indices = [z for z in z_indices.items()]
+    z_indices.sort(key=lambda p: p[0])
 
     for z, count in  z_indices:
         console.print(f'level [blue]{z}[/]: [green]{count}[/] tiles.')
 
+
+@raster.command('repack')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output numpy array', required=True)
+@click.option('-l', '--level', type=int, help='if set, only copy these levels', multiple=True)
+def raster_tile_repack(input, output, level):
+    from .dataset.pmtile import tile_repack
+
+    tile_repack(input, output, levels=None if len(level) == 0 else level)
+
+
+@raster.command('reencode')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output numpy array', required=True)
+def raster_tile_reencode(input, output):
+    from .dataset.pmtile import tile_encode_jpeg
+
+    tile_encode_jpeg(input, output)
+
+@raster.command('filter-empty')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output archive', required=True)
+def raster_tile_filter_empty(input, output):
+    from .dataset.pmtile import tile_filter_empty
+
+    tile_filter_empty(input, output)
+
+@raster.command('merge-fast')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True, multiple=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output archive', required=True)
+@click.option('-l', '--level', type=int, help='if set, only copy these levels', multiple=True)
+def raster_tile_merge_fast(input, output, level):
+    from .dataset.pmtile import tile_merge_fast
+
+    tile_merge_fast(input, output, levels=None if len(level) == 0 else level)
+
+
+@raster.command('tile-sample', help='sample a random tile')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True), help='output file', required=True)
+def tile_sample(input, output):
+    from pmtiles.reader import MmapSource
+    from pmtiles.tile import deserialize_header
+    from .dataset.pmtile import all_tile_entries
+    import random
+
+    get_bytes = MmapSource(open(input, 'rb'))
+
+    tiles = []
+    with console.status('reading...'):
+        for tile, offset, size in all_tile_entries(get_bytes):
+            tiles.append((tile, offset, size))
+
+
+    tile_id, offset, size = random.choice(tiles)
+    z, x, y = tileid_to_zxy(tile_id)
+    console.print(f'selected [bold cyan]{z}/{x}{y}[/] from {len(tiles)} candidates')
+
+    with open(output, 'wb') as fp:
+        fp.write(get_bytes(offset, size))
 
 @raster.command('tile-zoom', help='get all tiles in a raster as a list')
 @click.option('-i', '--input', type=click.Path(readable=True), help='input tile list (npy)', required=True)
