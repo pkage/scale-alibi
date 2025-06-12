@@ -25,20 +25,16 @@ cd $PROJ_DIR
 export PATH=/home/s1734411/py3.11.4/bin:$PATH
 cd $PROJ_DIR
 
-export OPML_BASE_URL=https://mlops.aws.kage.dev
-export OPML_KEY=sk_qGKuKy88p3
-export OPML_PROJECT=project
-
 # download
 
 download_dataset() {
-    if ! [ -s $LSCRATCH/$1/$2 ]; then
-        curl -L "$OPML_BASE_URL/storage/$OPML_PROJECT/download?c=dataset&k=$OPML_KEY&f=$1/$2" -o $LSCRATCH/pr/
+    if ! [ -s $LSCRATCH/$1 ]; then
+        curl -L https://se7a6ueojehnth4fhglodzchw40rfbuv.lambda-url.us-east-2.on.aws/$1 -o $LSCRATCH/$1
     else
-        echo "$1/$2 has already been downloaded"
+        echo "$1 has already been downloaded"
     fi
 }
 
-download_dataset composite sar.pmtile
-download_dataset composite visual.pmtile
-download_dataset composite hires_visual.pmtile
+download_dataset composite/sar.pmtile
+download_dataset composite/visual.pmtile
+download_dataset composite/hires_visual.pmtile
