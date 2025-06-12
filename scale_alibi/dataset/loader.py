@@ -6,7 +6,7 @@ import os
 from re import L
 from typing import Any, List
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import mercantile
 from pmtiles.reader import Reader as PMReader
 from pmtiles.reader import MmapSource, all_tiles
@@ -49,6 +49,7 @@ def image_bytes_to_array(img_bytes: bytes) -> np.ndarray:
         BytesIO(img_bytes),
         formats=['PNG', 'JPEG']
     )
+    
 
     return np.array(img, dtype=np.uint8)
 
@@ -244,7 +245,11 @@ class PMTile4xDataset(PMTileDataset):
         tile_bytes = self.tile_reader.get(z, x, y)
 
         # right now we're not handling unknown data
-        return image_bytes_to_array(tile_bytes)
+        try:
+            return image_bytes_to_array(tile_bytes)
+        except UnidentifiedImageError:
+            print(f'caught UnidentifiedImageError reading tile {tile_id} ({z}/{x}/{y}, {len(tile_bytes)} bytes) from {self.tile_filename}')
+            raise
 
 
 
