@@ -248,7 +248,7 @@ class PMTile4xDataset(PMTileDataset):
         try:
             return image_bytes_to_array(tile_bytes)
         except UnidentifiedImageError:
-            raise ValueError(f'caught UnidentifiedImageError reading tile {tile_id} ({z}/{x}/{y}, {len(tile_bytes)} bytes) from {self.tile_filename}')
+            raise ValueError(f'caught UnidentifiedImageError reading tile {tile_id} ({z}/{x}/{y} bytes) from {self.tile_filename}')
             # raise
 
 
