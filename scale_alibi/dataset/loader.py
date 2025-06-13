@@ -27,6 +27,8 @@ LoresMultimodalSample = namedtuple('LoresMultimodalSample', ['radar', 'lores', '
 
 # --- HELPERS ---
 
+DEFAULT_BLANK_IMAGE = np.zeros((256,256,3), dtype=np.uint8)
+
 def get_tile_list(source) -> List[int]:
     # only hang on to the tile_ids
     tile_list = [zxy_to_tileid(z,x,y) for (z,x,y), _ in all_tiles(source)]
@@ -248,7 +250,8 @@ class PMTile4xDataset(PMTileDataset):
         try:
             return image_bytes_to_array(tile_bytes)
         except UnidentifiedImageError:
-            raise ValueError(f'caught UnidentifiedImageError reading tile {tile_id} ({z}/{x}/{y} bytes) from {self.tile_filename}')
+            return DEFAULT_BLANK_IMAGE
+            # raise ValueError(f'caught UnidentifiedImageError reading tile {tile_id} ({z}/{x}/{y} bytes) from {self.tile_filename}')
             # raise
 
 
