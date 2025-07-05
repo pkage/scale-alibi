@@ -52,7 +52,7 @@ salibi train \
 	--learning-rate 1e-4 \
 	--epochs 50 \
 	--batch-size 24 \
-	--batch-limit 150 \
+	--batch-limit 96 \
 	--mask-ratio 0.4 \
 	--device cuda \
     --patch-size 8 \
