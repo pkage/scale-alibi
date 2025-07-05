@@ -37,4 +37,9 @@ cp ./data/composite/visual.pmtile $LSCRATCH/composite/visual.pmtile
 echo "copying hires"
 cp ./data/composite/hires_visual.pmtile $LSCRATCH/composite/hires_visual.pmtile
 
+echo "copying splits"
+cp ./data/composite/split_train.npy $LSCRATCH/composite/split_train.npy
+cp ./data/composite/split_test.npy $LSCRATCH/composite/split_test.npy
+cp ./data/composite/split_val.npy $LSCRATCH/composite/split_val.npy
+
 echo "done!"
