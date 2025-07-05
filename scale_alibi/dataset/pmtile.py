@@ -3,6 +3,7 @@
 import io
 import os
 from statistics import mean
+from typing import Set, List
 
 import numpy as np
 from PIL import Image
@@ -50,6 +51,46 @@ def tile_get_all_ids(filename):
 
     return tile_ids
 
+def tile_sample(infile, splits: List[float] = [0.75, 0.15], levels: Set[int] | None = None) -> List[np.ndarray]:
+    tile_ids = tile_get_all_ids(infile)
+
+    if levels is not None:
+        with console.status('filtering tiles...'):
+
+            tile_list = []
+            for tile_id in tile_ids:
+                z, _, _ = tileid_to_zxy(tile_id)
+                if not z in levels:
+                    continue
+                tile_list.append(tile_id)
+
+            tile_ids = tile_list
+
+
+
+    with console.status('sorting...'):
+        # sort and partition
+        tile_ids = np.array(tile_ids)
+
+        # create the split list
+        n_splits = np.array(splits) * tile_ids.shape[0]
+        console.print(n_splits)
+        n_splits = np.ceil(n_splits).astype(int)
+        console.print('creating splits:')
+        for i in range(n_splits.shape[0]):
+            console.print(f'  split {i}/{n_splits.shape[0]}: {n_splits[i]} ({splits[i]})')
+        console.print(f'  split {n_splits.shape[0]}/{n_splits.shape[0]}: [gray](remaining) ({1 - sum(splits)})')
+
+        n_splits = np.cumsum(n_splits)
+
+        tile_ids = np.random.permutation(tile_ids)
+        output_splits = np.split(tile_ids, n_splits)
+
+    return output_splits
+
+
+
+        
 
 
 def tile_repack(infile, outfile, levels=None):

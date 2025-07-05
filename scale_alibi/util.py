@@ -136,3 +136,26 @@ def scale_channels(
     image_array *= new_max
     
     return image_array.astype(original_dtype)
+
+
+def split_to_tuple(
+    input: str, separator: str = 'x', expected: int | None = None
+) -> Tuple:
+    """
+    Split a string by a character and return a tuple of integers.
+
+    :param input: The input string to be split.
+    :type input: str
+    :param expected: The expected number of fields after splitting. If provided, a ValueError is raised if the number of fields does not match.
+    :type expected: int | None
+    :return: A tuple of chunks obtained by splitting the input string.
+    :rtype: Tuple
+    """
+    out = input.split(separator)
+
+    if expected is not None and len(out) != expected:
+        raise ValueError(
+            f'expected {expected} fields, got {len(out)} in string {input}'
+        )
+
+    return tuple(out)

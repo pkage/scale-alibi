@@ -2,8 +2,8 @@
 
 notebooks/projection_cache/
 rasters
-dataset
-dataset/
+# dataset
+# dataset/
 logs/
 checkpoints
 checkpoints/

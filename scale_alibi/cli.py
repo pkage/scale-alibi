@@ -28,6 +28,7 @@ from .dataset.tile import (
     remove_alpha_tiles,
     tileid_to_zxy
 )
+from .util import split_to_tuple
 
 def parse_tile(tile_str: str) -> mercantile.Tile:
     z,x,y = tile_str.split('/')
@@ -494,6 +495,36 @@ def raster_tile_repair(input, output):
         output,
         'https://gis.apfo.usda.gov/arcgis/rest/services/NAIP/USDA_CONUS_PRIME/ImageServer/tile/{z}/{y}/{x}?blankTile=false',
     )
+
+@raster.command('tile-split', help='split a pmtile archive into smaller split lists')
+@click.option('-i', '--input', type=click.Path(readable=True), help='input tile archive', required=True)
+@click.option('-o', '--output', type=click.Path(writable=True, dir_okay=True), help='output folder', required=True)
+@click.option('-l', '--levels', type=str, help='allowed tile levels', required=True, multiple=True)
+@click.option('-s', '--splits', type=str, help='tile split sizes', required=True)
+def tile_sample_split(input, output, levels, splits):
+    from .dataset.pmtile import tile_sample
+    splits = [float(f) for f in split_to_tuple(splits, separator=',')]
+    levels = [int(l) for l in levels]
+
+    input = Path(input)
+    output = Path(output)
+
+    output_splits = tile_sample(
+        input,
+        splits=splits,
+        levels=set(levels)
+    )
+
+    with console.status('writing arrays...'):
+        for i, arr in enumerate(output_splits):
+            output_filename = f'split_{i}.npy'
+
+            np.save(
+                output / output_filename,
+                arr
+            )
+
+            console.print(f'wrote {arr.shape[0]} tile ids to {output / output_filename}')
 
 
 # --- CROMA ---
