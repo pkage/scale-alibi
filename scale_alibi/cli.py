@@ -615,11 +615,13 @@ def cli_croma_train( # rename so it doesn't clash
 @click.option('--radar', type=click.Path(readable=True), required=True, help='SAR path (sentinel-1)')
 @click.option('--hires', type=click.Path(readable=True), required=True, help='high resolution visual (naip tiles)')
 @click.option('--ckpts', type=click.Path(dir_okay=True, file_okay=False), required=True, help='path to write checkpoints to')
+@click.option('--flist', type=click.Path(readable=True), required=False, default=None, help='list of tiles to filter down to (optional)')
 @click.option('--run-name', type=str, required=True, help='run name')
 @click.option('--run-group', type=str, default='croma', help='run group (for wandb)')
 @click.option('-l', '--learning-rate', type=float, required=True, help='learning rate (Adam)')
 @click.option('-e', '--epochs', type=int, required=True, help='epoch count')
 @click.option('-b', '--batch-size', type=int, required=True, help='batch size')
+@click.option('--batch-limit', type=int, help='batch limit per epoch', default=None)
 @click.option('-d', '--device', type=click.Choice(['cpu', 'cuda', 'mps']), required=True, help='device to run on')
 @click.option('-m', '--mask-ratio', type=float, default=0.4, help='mask ratio (ratio of patches to keep)')
 @click.option('--patch-size', type=int, default=16, help='side length of patches to make')
@@ -633,11 +635,13 @@ def cli_salibi_train(
         radar,
         hires,
         ckpts,
+        flist,
         run_name,
         run_group,
         learning_rate,
         epochs,
         batch_size,
+        batch_limit,
         device,
         mask_ratio,
         patch_size,
@@ -655,9 +659,11 @@ def cli_salibi_train(
         lores_dataset_path=Path(lores),
         radar_dataset_path=Path(radar),
         hires_dataset_path=Path(hires),
+        tile_filter_list_path=Path(flist) if flist is not None else None,
 
         learning_rate=learning_rate,
         batch_size=batch_size,
+        batch_limit=batch_limit,
         mask_ratio=mask_ratio,
         epochs=epochs,
 

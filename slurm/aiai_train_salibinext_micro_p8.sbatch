@@ -46,11 +46,13 @@ salibi train \
 	--lores $LSCRATCH/datasets/composite/visual.pmtile \
 	--radar $LSCRATCH/datasets/composite/sar.pmtile \
 	--hires $LSCRATCH/datasets/composite/hires_visual.pmtile \
+    --flist $LSCRATCH/datasets/composite/split_train.npy \
 	--ckpts $LSCRATCH/checkpoints/sibinxt_micro_p8 \
 	--run-name sibinxt_micro_p8 \
 	--learning-rate 1e-4 \
 	--epochs 50 \
 	--batch-size 24 \
+	--batch-limit 150 \
 	--mask-ratio 0.4 \
 	--device cuda \
     --patch-size 8 \

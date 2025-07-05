@@ -58,7 +58,9 @@ class ScaleAlibiParams:
     lores_dataset_path: Path
     radar_dataset_path: Path
     hires_dataset_path: Path
+    tile_filter_list_path: Path | None
     batch_size: int = 32
+    batch_limit: int | None = None
     
     # hyperparams, total guess for now
     # croma_inherited
@@ -414,6 +416,9 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
         hires_4x_dset
     )
 
+    if salibi_params.tile_filter_list_path is not None:
+        dataset.load_filter_list(salibi_params.tile_filter_list_path)
+
 
     # sampler and loaders
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
@@ -463,6 +468,9 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
 
         total_loss = 0
         for batch_idx, batch in enumerate(loader):
+            if salibi_params.batch_limit is not None:
+                if salibi_params.batch_limit > batch_idx:
+                    break
             # get the data masks for the MAE
 
             seq_len = salibi_params.num_patches

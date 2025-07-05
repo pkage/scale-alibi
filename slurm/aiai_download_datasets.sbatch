@@ -38,3 +38,6 @@ download_dataset() {
 download_dataset composite/sar.pmtile
 download_dataset composite/visual.pmtile
 download_dataset composite/hires_visual.pmtile
+download_dataset composite/split_train.npy
+download_dataset composite/split_test.npy
+download_dataset composite/split_val.npy

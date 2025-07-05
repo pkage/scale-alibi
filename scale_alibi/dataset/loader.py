@@ -4,7 +4,7 @@ from .. import console
 from io import BytesIO
 import os
 from re import L
-from typing import Any, List
+from typing import Any, List, Set
 
 from PIL import Image, UnidentifiedImageError
 import mercantile
@@ -69,11 +69,12 @@ def numpy_bytes_to_array(np_bytes: bytes) -> np.ndarray:
 class TileIdDataset(Dataset):
     tile_ids: List[int]
     transform: Any
+    filter_list: Set[int] | None
 
     def __init__(self, transform=None):
         self.transform = transform
         self.tile_ids = []
-
+        self.filter_list = None
 
     def __len__(self):
         return len(self.tile_ids)
@@ -84,7 +85,17 @@ class TileIdDataset(Dataset):
         return mercantile.Tile(z=z, x=x, y=y)
 
     def has_tile_id(self, tile_id):
+        if self.filter_list is not None:
+            if tile_id not in self.filter_list:
+                return False
         return tile_id in self.tile_ids
+
+    def set_filter_list(self, filter_list: np.ndarray):
+        self.filter_list = set(filter_list)
+
+    def load_filter_list(self, filter_list_file: Path):
+        filter_list = np.load(filter_list_file)
+        self.set_filter_list(filter_list)
 
     def __getitem__(self, index) -> Any:
         # first, get the tileid
@@ -338,6 +349,14 @@ class TileUnionDataset(TileIdDataset):
         self.datasets.append(dataset)
         self.recalculate_tile_list()
 
+    def set_filter_list(self, filter_list: np.ndarray):
+        for dset in self.datasets:
+            dset.set_filter_list(filter_list)
+
+    def load_filter_list(self, filter_list_file: Path):
+        for dset in self.datasets:
+            dset.load_filter_list(filter_list_file)
+
 
     def get_by_tile_id(self, tile_id):
         tile_arr = []
@@ -366,6 +385,13 @@ class LoresMultimodalDataset(TileIdDataset):
 
         self.recalculate_tile_list()
 
+    def set_filter_list(self, filter_list: np.ndarray):
+        self.radar_datasets.set_filter_list(filter_list)
+        self.lores_datasets.set_filter_list(filter_list)
+
+    def load_filter_list(self, filter_list_file: Path):
+        self.radar_datasets.load_filter_list(filter_list_file)
+        self.lores_datasets.load_filter_list(filter_list_file)
 
     
     def recalculate_tile_list(self):
@@ -418,9 +444,6 @@ class MultimodalDataset(TileIdDataset):
         self.tile_ids = list(valid_tiles)
         self.tile_ids.sort() # sort by ID to ensure reproducibility
 
-
-        
-        
 
     def get_by_tile_id(self, tile_id) -> MultimodalSample:
         sample = MultimodalSample(
