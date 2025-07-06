@@ -50,7 +50,7 @@ salibi train \
 	--ckpts $LSCRATCH/checkpoints/sibinxt_micro_p8 \
 	--run-name sibinxt_micro_p8 \
 	--learning-rate 1e-4 \
-	--epochs 50 \
+	--epochs 500 \
 	--batch-size 24 \
 	--batch-limit 96 \
 	--mask-ratio 0.4 \

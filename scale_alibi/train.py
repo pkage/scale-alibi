@@ -469,7 +469,9 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
         total_loss = 0
         for batch_idx, batch in enumerate(loader):
             if salibi_params.batch_limit is not None:
+                console.print(f'rank: {rank}/{world_size}, batch {batch_idx}/{salibi_params.batch_limit}')
                 if salibi_params.batch_limit > batch_idx:
+                    console.print(f'batch limiting')
                     break
             # get the data masks for the MAE
 
@@ -549,7 +551,7 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
 
                 total_loss += loss.item()
 
-            if rank == 0 and batch_idx % 10 == 0:
+            if rank == 0 and batch_idx % 2 == 0:
                 print(f"Epoch [{epoch+1}/{salibi_params.epochs}], Step [{batch_idx+1}/{len(loader)}], Loss: {loss.item():.4f}")
                 wandb.log({
                     'epoch': epoch + 1,
