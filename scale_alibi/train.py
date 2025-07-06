@@ -470,7 +470,7 @@ def salibi_train(rank: int, world_size: int, salibi_params: ScaleAlibiParams, tr
         for batch_idx, batch in enumerate(loader):
             if salibi_params.batch_limit is not None:
                 console.print(f'rank: {rank}/{world_size}, batch {batch_idx}/{salibi_params.batch_limit}')
-                if salibi_params.batch_limit > batch_idx:
+                if batch_idx > salibi_params.batch_limit:
                     console.print(f'batch limiting')
                     break
             # get the data masks for the MAE
